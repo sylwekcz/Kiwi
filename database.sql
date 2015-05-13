@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS konta_dane_adresy (
 	PRIMARY KEY (adres_id),
 
 	UNIQUE (miejscowosc, kod_pocztowy, ulica, nr_mieszkania)
-);
+) ENGINE=INNODB;
 
 CREATE TABLE IF NOT EXISTS konta_dane (
 	dane_id INT NOT NULL AUTO_INCREMENT,
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS sesje (
 	FOREIGN KEY (konto_id) REFERENCES konta(konto_id),
 
 	UNIQUE (hash, salt)
-);
+) ENGINE=INNODB;
 
 CREATE TABLE IF NOT EXISTS lektorzy (
 	lektor_id INT NOT NULL AUTO_INCREMENT,
@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS kurs_kandydaci (
 	FOREIGN KEY (kursant_id) REFERENCES kursanci(kursant_id),
 
 	UNIQUE (kurs_id, kursant_id)
-);
+) ENGINE=INNODB;
 
 CREATE TABLE IF NOT EXISTS kurs_grupy (
 	grupa_id INT NOT NULL AUTO_INCREMENT,
