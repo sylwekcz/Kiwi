@@ -54,20 +54,15 @@ abstract class Database
 	 *
 	 * @param string $tableName  Target table
 	 * @param array  $data       Data array consisting of field and value
-	 * @param string $dataFormat Fields format (i - int, d - double, s - string)
 	 *
 	 * @return bool True on successfully inserted record, false otherwise
 	 */
-	final public static function insert($tableName, $data, $dataFormat)
+	final public static function insert($tableName, $data)
 	{
-		if (!is_string($tableName) || !is_array($data) || !is_string($dataFormat))
+		if (!is_string($tableName) || !is_array($data))
 			throw new InvalidArgumentException;
 
-		if (self::isValidName($tableName))
-			throw new UnexpectedValueException;
-
-		// Format can only consist of: i - integer, d - double, s - string
-		if ((count($data) != strlen($dataFormat) || preg_match('/[^ids]/', $dataFormat)))
+		if (!self::isValidName($tableName))
 			throw new UnexpectedValueException;
 
 		if (!self::isConnected())
@@ -75,8 +70,8 @@ abstract class Database
 
 
 		// Prepare data...
-		list ($fields, $placeholders, $values) = self::_parseData($data);
-		array_unshift($values, $dataFormat); // Prepare for bind_param where format is the first param
+		list ($fields, $placeholders, $values, $format) = self::_prepareData($data);
+		array_unshift($values, $format); // Prepare for bind_param where format is the first param
 
 		$statement = self::$_handle->prepare("INSERT INTO {$tableName} ({$fields}) VALUES ({$placeholders})");
 
@@ -95,9 +90,16 @@ abstract class Database
 		return $statement->execute() && $statement->affected_rows;
 	}
 
-	final public static function update($tableName, $data, $dataFormat, $where, $whereFormat)
+	/**
+	 * Execute update query
+	 *
+	 * @param string $tableName Target table
+	 * @param array $data
+	 * @param array $where
+	 */
+	final public static function update($tableName, $data, $where)
 	{
-		if (!is_string($tableName) || !is_array($data) || !is_string($dataFormat) || !is_string($where))
+		if (!is_string($tableName) || !is_array($data) || !is_string($where))
 			throw new InvalidArgumentException;
 	}
 
@@ -111,76 +113,99 @@ abstract class Database
 
 	}
 
-	final private static function _parseData($data, $update = false)
+	final private static function _prepareData($data, $update = false)
 	{
-		if (is_array($data))
+		if (!is_array($data))
 			throw new InvalidArgumentException;
 
 
 		$fields       = '';
-		$placeholders = '';
+		$placeholders = ''; // Aside with values
 		$values       = [];
+		$format       = ''; // Values format
 
 		// Something in here
 		if (!empty($data))
 		{
 			foreach ($data as $field => $value)
 			{
-				$fields .= $field . ','; // Build field list
-				array_push($values, $value); // Build value list
-				// TODO: types
+				// Validate type and build format
+				if (is_int($value))         $format .= 'i';
+				else if (is_string($value)) $format .= 's';
+				else if (is_double($value)) $format .= 'd';
+				else
+					throw new UnexpectedValueException;
 
-				// In update query column name is required
+
+				$fields .= $field . ', '; // Build field list
+				array_push($values, $value); // Build value list
+
+				// Column name is required when updating
 				if ($update) $placeholders .= $field . '=?, ';
 				else         $placeholders .= '?, ';
 			}
 
-			// Remove last comma
+			// Remove last comma space sequence
 			$fields       = substr($fields, 0, -2);
 			$placeholders = substr($placeholders, 0, -2);
 		}
 
-		return [$fields, $placeholders, $values];
+		return [$fields, $placeholders, $values, $format];
 	}
 
-	final public static function _parseConditions($conditionData)
+	final public static function _prepareConditions($conditionData)
 	{
 		if (!is_array($conditionData))
 			throw new InvalidArgumentException;
 
 
-		$conditions = '';
+		$conditions = ''; // Output SQL query
 		$values     = [];
+		$format     = ''; // Values format
 
-		$inside     = false;
+		$inside     = false; // Condition nesting
+
 
 		if (!empty($conditionData))
 		{
-			foreach ($conditionData as $field => $value)
+			foreach ($conditionData as $field => $data)
 			{
 				// Nested condition, ie: ['a' => ['b' => 'c', 'd' => 1]]
-				if (is_int($field) && is_array($value))
+				if (is_int($field) && is_array($data))
 				{
 					$inside = true;
 
-					// Parse nested condition, nesting means OR will be used
-					list ($nestedFields, $nestedValues) = self::_parseConditions($value);
+					// Parse nested condition, this means we are building an alternative
+					list ($nestedFields, $nestedValues, $nestedFormat) = self::_prepareConditions($data);
 					$conditions .= '(' . $nestedFields . ') OR ';
-					$values     = array_merge($values, $nestedValues);
+					$values     = array_merge($values, $nestedValues); // Copy values
+					$format     .= $nestedFormat; // Copy format
 
 					continue;
 				}
 
+
+				// Extract value
+				$value = is_array($data) ? $data[1] : $data;
+
 				// Convert extra operators
-				if (is_null($value[0]))
+				if (is_null($value))
 				{
 					$conditions .= $field . ' IS NULL AND ';
 					continue;
 				}
 
 
+				// Validate type and build format
+				if (is_int($value))         $format .= 'i';
+				else if (is_string($value)) $format .= 's';
+				else if (is_double($value)) $format .= 'd';
+				else
+					throw new UnexpectedValueException;
+
+
 				// Determinate used operator
-				$operator = is_array($value) ? $value[0] : '=';
+				$operator = is_array($data) ? $data[0] : '=';
 
 				// Operators allowed: null = != > < !< !> >= <= <> % !%
 				if (!preg_match('/^( |=|!=|>|<|!<|!>|>=|<=|<>|%|!%)$/', $operator))
@@ -191,8 +216,7 @@ abstract class Database
 				else if ($operator === '!%') $operator = 'NOT LIKE';
 
 				$conditions .= $field . ' ' . $operator . ' ? AND ';
-				array_push($values, $value[1]);
-				// TODO: types
+				array_push($values, $value);
 			}
 
 			// Cut the last AND statement
@@ -204,7 +228,8 @@ abstract class Database
 		if ($inside)
 			$conditions = substr($conditions, 0, -4);
 
-		return [$conditions, $values];
+
+		return [$conditions, $values, $format];
 	}
 
 
