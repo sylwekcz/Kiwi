@@ -194,7 +194,6 @@ abstract class Database
 				$conditions .= $field . ' ' . $operator . ' ? AND ';
 				array_push($values, $value[1]);
 				// TODO: types
-				// test
 			}
 
 			// Cut the last AND statement
