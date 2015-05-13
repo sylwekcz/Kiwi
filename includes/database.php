@@ -170,7 +170,7 @@ abstract class Database
 
 					continue;
 				}
-
+				//aaa
 
 				// Convert extra operators
 				if (is_null($value[0]))
