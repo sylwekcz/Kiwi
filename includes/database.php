@@ -27,12 +27,13 @@ abstract class Database
 	final public static function connect()
 	{
 		// Already connected!
-		if (self::isConnected())
+		if (self::is_connected())
 			return;
 
 
 		self::$_handle = new mysqli(Config::SQL_HOST, Config::SQL_USER, Config::SQL_PASSWORD, Config::SQL_DATABASE);
 
+		// Connection failed, bad config might it be...
 		if (!self::$_handle)
 			throw new DatabaseFailedException;
 	}
@@ -45,7 +46,7 @@ abstract class Database
 	final public static function disconnect()
 	{
 		// No existing connections
-		if (!self::isConnected())
+		if (!self::is_connected())
 			return;
 
 		// Unable to close
@@ -60,22 +61,25 @@ abstract class Database
 	 * @param string $table Target table
 	 * @param array  $data  Data array consisting of field and value
 	 *
-	 * @return bool ID of inserted record on success (positive values only), false otherwise
+	 * @return int ID of inserted record on success (positive values only), false on duplicates
 	 */
 	final public static function insert($table, $data)
 	{
-		if (!is_string($table) || !is_array($data) && !empty($data))
+		if (!is_string($table) || !is_array($data))
 			throw new InvalidArgumentException;
 
-		if (!self::isValidName($table))
+		if (empty($data))
 			throw new UnexpectedValueException;
 
-		if (!self::isConnected())
+		if (!is_safe_string($table))
+			throw new UnexpectedValueException;
+
+		if (!self::is_connected())
 			throw new DatabaseNotConnected;
 
 
 		// Prepare data...
-		list ($fields, $placeholders, $values, $format) = self::_prepareData($data);
+		list ($fields, $placeholders, $values, $format) = self::_prepare_data($data);
 		array_unshift($values, $format); // Prepare for bind_param where format is the first param
 
 		// Bad query
@@ -115,7 +119,7 @@ abstract class Database
 	 * @param array  $data     New data
 	 * @param array  $criteria Update conditions
 	 *
-	 * @return bool True on successfully updated record (keep in mind that it might be zero), false otherwise
+	 * @return int Number of records updated (keep in mind that it might be zero)
 	 */
 	final public static function update($table, $data, $criteria)
 	{
@@ -125,24 +129,24 @@ abstract class Database
 		if (empty($data) || empty($criteria))
 			throw new UnexpectedValueException;
 
-		if (!self::isValidName($table))
+		if (!is_safe_string($table))
 			throw new UnexpectedValueException;
 
-		if (!self::isConnected())
+		if (!self::is_connected())
 			throw new DatabaseNotConnected;
 
 
 		// Prepare data and criteria
-		list ($dataPlaceholders, $dataValues, $dataFormat) = self::_prepareData($data, true);
-		list ($criteria, $criteriaValues, $criteriaFormat) = self::_prepareConditions($criteria);
+		list ($data_placeholders, $data_values, $data_format) = self::_prepare_data($data, true); // Data format for update query required
+		list ($criteria, $criteria_values, $criteria_format) = self::_prepare_conditions($criteria);
 
 		// Merge values and prepare for bind_param
-		$values = array_merge($dataValues, $criteriaValues);
-		$format = $dataFormat . $criteriaFormat;
-		array_unshift($values, $format);
+		$values = array_merge($data_values, $criteria_values);
+		$format = $data_format . $criteria_format;
+		array_unshift($values, $format); // Concentrate values with their format
 
 		// Bad query
-		if (!($statement = self::$_handle->prepare("UPDATE {$table} SET {$dataPlaceholders} WHERE {$criteria}")))
+		if (!($statement = self::$_handle->prepare("UPDATE {$table} SET {$data_placeholders} WHERE {$criteria}")))
 			throw new RuntimeException;
 
 
@@ -159,10 +163,10 @@ abstract class Database
 	/**
 	 * Execute delete query
 	 *
-	 * @param string $table      Target table
+	 * @param string $table    Target table
 	 * @param array  $criteria Delete conditions
 	 *
-	 * @return bool|int Number of deleted records on success (keep in mind that it might be zero), false otherwise
+	 * @return int Number of deleted records on success (keep in mind that it might be zero)
 	 */
 	final public static function delete($table, $criteria)
 	{
@@ -172,12 +176,13 @@ abstract class Database
 		if (empty($criteria))
 			throw new UnexpectedValueException;
 
-		if (!self::isValidName($table))
+		if (!is_safe_string($table))
 			throw new UnexpectedValueException;
 
 
-		list ($criteria, $values, $format) = self::_prepareConditions($criteria);
-		array_unshift($values, $format);
+		// Prepare for bind_param
+		list ($criteria, $values, $format) = self::_prepare_conditions($criteria);
+		array_unshift($values, $format); // Format comes first
 
 		// Bad query
 		if (!($statement = self::$_handle->prepare("DELETE FROM {$table} WHERE {$criteria}")))
@@ -194,6 +199,15 @@ abstract class Database
 		return $statement->affected_rows;
 	}
 
+	/**
+	 * Execute select query
+	 *
+	 * @param string $table      Target table
+	 * @param array  $columns    List of columns to retrieve
+	 * @param array  $conditions Select conditions
+	 *
+	 * @return array|bool Array of results on success, false otherwise
+	 */
 	final public static function select($table, $columns, $conditions)
 	{
 		if (!is_string($table) || !is_array($columns) || !is_array($conditions))
@@ -202,11 +216,10 @@ abstract class Database
 		if (empty($columns) || empty($conditions))
 			throw new UnexpectedValueException;
 
-		if (!self::isValidName($table))
+		if (!is_safe_string($table))
 			throw new UnexpectedValueException;
 
-		// Verify field names
-		if (!empty(preg_grep('/(\W)/', $columns)))
+		if (!is_safe_string($columns))
 			throw new UnexpectedValueException;
 
 
@@ -214,7 +227,7 @@ abstract class Database
 		$fields = implode(', ', $columns);
 
 		// Prepare params
-		list ($criteria, $values, $format) = self::_prepareConditions($conditions);
+		list ($criteria, $values, $format) = self::_prepare_conditions($conditions);
 		array_unshift($values, $format);
 
 		// Bad query
@@ -222,38 +235,57 @@ abstract class Database
 			throw new RuntimeException;
 
 
-		$paramsHandler = [$statement, 'bind_param'];
-		$resultHandler = [$statement, 'bind_result'];
+		$param_handler = [$statement, 'bind_param'];
 
 		// Pass parameters
-		if (!is_callable($paramsHandler) || !call_user_func_array($paramsHandler, array_references($values)) || !$statement->execute())
+		if (!is_callable($param_handler) || !call_user_func_array($param_handler, array_references($values)) || !$statement->execute())
 			throw new RuntimeException;
 
 
-		//$statement->store_result();
+		// Lets see what was returned
+		$meta = $statement->result_metadata();
+
+		// No data returned
+		if (!$meta)
+		{
+			$statement->close(); // Clean up the mess
+			return false;
+		}
+
+
+		// Buffer returned data
+		$statement->store_result();
+
 		$result = [];
 
-		$meta = $statement->result_metadata();
+		// Build field list
 		while ($field = $meta->fetch_field())
 			$result[] = &$row[$field->name];
 
-		if (!is_callable($resultHandler) || !call_user_func_array($resultHandler, array_references($result, true)))
+		$result_handler = [$statement, 'bind_result'];
+
+		// Store fields in array
+		if (!is_callable($result_handler) || !call_user_func_array($result_handler, array_references($result, true)))
 			throw new RuntimeException;
 
 
-		$results = [];
+		$results = []; // Contains all returned data
 
+		// Loop through every returned record
 		while ($statement->fetch())
 		{
 			$row = [];
 
+			// Build a temporary record and copy data since the result consist of references
 			foreach ($result as $field => $value)
 				$row[$field] = $value;
 
 			array_push($results, $row);
 		}
 
-		var_dump($results);
+		// Clean up
+		$statement->free_result();
+		$statement->close();
 
 		return $results;
 	}
@@ -262,12 +294,12 @@ abstract class Database
 	 * Parse data for later (easier) use with bind_param
 	 * Supports Update queries
 	 *
-	 * @param array $data Input data array
-	 * @param bool $update Switch to Update queries, fields column will be omitted
+	 * @param array $data   Input data array
+	 * @param bool  $update Switch to Update queries, fields column will be omitted
 	 *
 	 * @return array Parsed data as fields, placeholders, values and values format
 	 */
-	final private static function _prepareData($data, $update = false)
+	final private static function _prepare_data($data, $update = false)
 	{
 		if (!is_array($data))
 			throw new InvalidArgumentException;
@@ -323,15 +355,15 @@ abstract class Database
 	 *
 	 * @return array Parsed data as criteria, values, and values format
 	 */
-	final public static function _prepareConditions($conditions)
+	final private static function _prepare_conditions($conditions)
 	{
 		if (!is_array($conditions))
 			throw new InvalidArgumentException;
 
 
 		$criteria = ''; // Output SQL query
-		$values     = [];
-		$format     = ''; // Values format
+		$values   = [];
+		$format   = ''; // Values format
 
 		$nested = false; // Condition nesting
 
@@ -346,16 +378,16 @@ abstract class Database
 					$nested = true;
 
 					// Parse nested condition, this means we are building an alternative
-					list ($nestedFields, $nestedValues, $nestedFormat) = self::_prepareConditions($data);
-					$criteria .= '(' . $nestedFields . ') OR ';
-					$values = array_merge($values, $nestedValues); // Copy values
-					$format .= $nestedFormat; // Copy format
+					list ($nested_fields, $nested_values, $nested_format) = self::_prepare_conditions($data);
+					$criteria .= '(' . $nested_fields . ') OR ';
+					$values = array_merge($values, $nested_values); // Copy values
+					$format .= $nested_format; // Copy format
 
 					continue;
 				}
 
 
-				if (!self::isValidName($field))
+				if (!is_safe_string($field))
 					throw new UnexpectedValueException;
 
 
@@ -412,7 +444,7 @@ abstract class Database
 	 *
 	 * @return mysqli True when connected, false otherwise
 	 */
-	final public static function isConnected()
+	final public static function is_connected()
 	{
 		if (!self::$_handle) // No opened connection
 			return false;
@@ -427,19 +459,6 @@ abstract class Database
 		}
 
 		return true;
-	}
-
-
-	/**
-	 * Make sure given string contains only safe (word) characters
-	 *
-	 * @param string $name Input string
-	 *
-	 * @return bool True if string is safe, false otherwise
-	 */
-	final private static function isValidName($name)
-	{
-		return is_string($name) && !preg_match('/(\W)/', $name);
 	}
 }
 

@@ -16,7 +16,7 @@ class Account
 	 */
 	final public function login($login, $password)
 	{
-		Database::query('');
+
 	}
 
 	final public function logout()
