@@ -78,10 +78,8 @@ abstract class Database
 		list ($fields, $placeholders, $values, $format) = self::_prepareData($data);
 		array_unshift($values, $format); // Prepare for bind_param where format is the first param
 
-		$statement = self::$_handle->prepare("INSERT INTO {$table} ({$fields}) VALUES ({$placeholders})");
-
 		// Bad query
-		if (!$statement)
+		if (!($statement = self::$_handle->prepare("INSERT INTO {$table} ({$fields}) VALUES ({$placeholders})")))
 			throw new RuntimeException;
 
 
@@ -90,6 +88,7 @@ abstract class Database
 		// Pass parameters
 		if (!is_callable($handler) || !call_user_func_array($handler, array_references($values)))
 			throw new RuntimeException;
+
 
 		// Query failed
 		if (!$statement->execute())
@@ -112,18 +111,18 @@ abstract class Database
 	/**
 	 * Execute update query
 	 *
-	 * @param string $table      Target table
-	 * @param array  $data       New data
-	 * @param array  $conditions Update conditions
+	 * @param string $table    Target table
+	 * @param array  $data     New data
+	 * @param array  $criteria Update conditions
 	 *
 	 * @return bool True on successfully updated record (keep in mind that it might be zero), false otherwise
 	 */
-	final public static function update($table, $data, $conditions)
+	final public static function update($table, $data, $criteria)
 	{
-		if (!is_string($table) || !is_array($data) || !is_array($conditions))
+		if (!is_string($table) || !is_array($data) || !is_array($criteria))
 			throw new InvalidArgumentException;
 
-		if (empty($data) || empty($conditions))
+		if (empty($data) || empty($criteria))
 			throw new UnexpectedValueException;
 
 		if (!self::isValidName($table))
@@ -133,19 +132,17 @@ abstract class Database
 			throw new DatabaseNotConnected;
 
 
-		// Prepare data and conditions
+		// Prepare data and criteria
 		list ($dataPlaceholders, $dataValues, $dataFormat) = self::_prepareData($data, true);
-		list ($conditions, $conditionValues, $conditionFormat) = self::_prepareConditions($conditions);
+		list ($criteria, $criteriaValues, $criteriaFormat) = self::_prepareConditions($criteria);
 
 		// Merge values and prepare for bind_param
-		$values = array_merge($dataValues, $conditionValues);
-		$format = $dataFormat . $conditionFormat;
+		$values = array_merge($dataValues, $criteriaValues);
+		$format = $dataFormat . $criteriaFormat;
 		array_unshift($values, $format);
 
-		$statement = self::$_handle->prepare("UPDATE {$table} SET {$dataPlaceholders} WHERE {$conditions}");
-
 		// Bad query
-		if (!$statement)
+		if (!($statement = self::$_handle->prepare("UPDATE {$table} SET {$dataPlaceholders} WHERE {$criteria}")))
 			throw new RuntimeException;
 
 
@@ -163,29 +160,27 @@ abstract class Database
 	 * Execute delete query
 	 *
 	 * @param string $table      Target table
-	 * @param array  $conditions Delete conditions
+	 * @param array  $criteria Delete conditions
 	 *
 	 * @return bool|int Number of deleted records on success (keep in mind that it might be zero), false otherwise
 	 */
-	final public static function delete($table, $conditions)
+	final public static function delete($table, $criteria)
 	{
-		if (!is_string($table) || !is_array($conditions))
+		if (!is_string($table) || !is_array($criteria))
 			throw new InvalidArgumentException;
 
-		if (empty($conditions))
+		if (empty($criteria))
 			throw new UnexpectedValueException;
 
 		if (!self::isValidName($table))
 			throw new UnexpectedValueException;
 
 
-		list ($conditions, $values, $format) = self::_prepareConditions($conditions);
+		list ($criteria, $values, $format) = self::_prepareConditions($criteria);
 		array_unshift($values, $format);
 
-		$statement = self::$_handle->prepare("DELETE FROM {$table} WHERE {$conditions}");
-
 		// Bad query
-		if (!$statement)
+		if (!($statement = self::$_handle->prepare("DELETE FROM {$table} WHERE {$criteria}")))
 			throw new RuntimeException;
 
 
@@ -199,9 +194,68 @@ abstract class Database
 		return $statement->affected_rows;
 	}
 
-	final public static function select()
+	final public static function select($table, $columns, $conditions)
 	{
+		if (!is_string($table) || !is_array($columns) || !is_array($conditions))
+			throw new InvalidArgumentException;
 
+		if (empty($columns) || empty($conditions))
+			throw new UnexpectedValueException;
+
+		if (!self::isValidName($table))
+			throw new UnexpectedValueException;
+
+		// Verify field names
+		if (!empty(preg_grep('/(\W)/', $columns)))
+			throw new UnexpectedValueException;
+
+
+		// Build fields list
+		$fields = implode(', ', $columns);
+
+		// Prepare params
+		list ($criteria, $values, $format) = self::_prepareConditions($conditions);
+		array_unshift($values, $format);
+
+		// Bad query
+		if (!($statement = self::$_handle->prepare("SELECT {$fields} FROM {$table} WHERE {$criteria}")))
+			throw new RuntimeException;
+
+
+		$paramsHandler = [$statement, 'bind_param'];
+		$resultHandler = [$statement, 'bind_result'];
+
+		// Pass parameters
+		if (!is_callable($paramsHandler) || !call_user_func_array($paramsHandler, array_references($values)) || !$statement->execute())
+			throw new RuntimeException;
+
+
+		//$statement->store_result();
+		$result = [];
+
+		$meta = $statement->result_metadata();
+		while ($field = $meta->fetch_field())
+			$result[] = &$row[$field->name];
+
+		if (!is_callable($resultHandler) || !call_user_func_array($resultHandler, array_references($result, true)))
+			throw new RuntimeException;
+
+
+		$results = [];
+
+		while ($statement->fetch())
+		{
+			$row = [];
+
+			foreach ($result as $field => $value)
+				$row[$field] = $value;
+
+			array_push($results, $row);
+		}
+
+		var_dump($results);
+
+		return $results;
 	}
 
 	/**
@@ -279,7 +333,7 @@ abstract class Database
 		$values     = [];
 		$format     = ''; // Values format
 
-		$inside = false; // Condition nesting
+		$nested = false; // Condition nesting
 
 
 		if (!empty($conditions))
@@ -289,7 +343,7 @@ abstract class Database
 				// Nested condition, ie: ['a' => ['b' => 'c', 'd' => 1]]
 				if (is_int($field) && is_array($data))
 				{
-					$inside = true;
+					$nested = true;
 
 					// Parse nested condition, this means we are building an alternative
 					list ($nestedFields, $nestedValues, $nestedFormat) = self::_prepareConditions($data);
@@ -340,12 +394,12 @@ abstract class Database
 			}
 
 			// Cut the last AND statement
-			if (!$inside)
+			if (!$nested)
 				$criteria = substr($criteria, 0, -5);
 		}
 
 		// Cut the last OR statement
-		if ($inside)
+		if ($nested)
 			$criteria = substr($criteria, 0, -4);
 
 
