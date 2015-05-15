@@ -1,10 +1,10 @@
 <?php
 namespace Kiwi;
 
-use \mysqli;
-use \RuntimeException;
-use \InvalidArgumentException;
-use \UnexpectedValueException;
+use mysqli;
+use RuntimeException;
+use InvalidArgumentException;
+use UnexpectedValueException;
 
 
 register_shutdown_function(__NAMESPACE__ . '\Database::disconnect');
@@ -23,15 +23,26 @@ abstract class Database
 
 	/**
 	 * Connect to database using details from config.php
+	 *
+	 * @param string $host     SQL hostname
+	 * @param string $user     SQL username
+	 * @param string $password SQL user password
+	 * @param string $database SQL database to use
 	 */
-	final public static function connect()
+	final public static function connect($host, $user, $password, $database)
 	{
+		if (!is_string($host) || !is_string($user) || !is_string($password) || !is_string($database))
+			throw new InvalidArgumentException;
+
+		if (empty($host) || empty($user) || empty($database))
+			throw new UnexpectedValueException;
+
 		// Already connected!
 		if (self::is_connected())
 			return;
 
 
-		self::$_handle = new mysqli(Config::SQL_HOST, Config::SQL_USER, Config::SQL_PASSWORD, Config::SQL_DATABASE);
+		self::$_handle = new mysqli($host, $user, $password, $database);
 
 		// Connection failed, bad config might it be...
 		if (!self::$_handle)
@@ -106,7 +117,7 @@ abstract class Database
 
 		// Something went wrong
 		if (!$statement->affected_rows)
-			return false;
+			throw new RuntimeException;
 
 
 		return $statement->insert_id;
@@ -246,16 +257,20 @@ abstract class Database
 		$meta = $statement->result_metadata();
 
 		// No data returned
+		// TODO: test this
 		if (!$meta)
 		{
 			$statement->close(); // Clean up the mess
-			return false;
+			throw new RuntimeException;
 		}
+
+		// Something went wrong...
+		if (!$meta->field_count != count($columns))
+			throw new RuntimeException;
 
 
 		// Buffer returned data
 		$statement->store_result();
-
 		$result = [];
 
 		// Build field list

@@ -36,3 +36,26 @@ function is_safe_string($data)
 
 	return true;
 }
+
+function is_valid_email($email)
+{
+	// TODO
+	return true;
+}
+
+function is_valid_login($login)
+{
+	// TODO
+	return true;
+}
+
+function is_valid_password($password)
+{
+	// TODO
+	return true;
+}
+
+function is_valid_id($id)
+{
+	return is_int($id) && ($id > 0);
+}

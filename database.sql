@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS konta_dane_adresy (
+CREATE TABLE IF NOT EXISTS `konta_dane_adresy` (
 	adres_id INT NOT NULL AUTO_INCREMENT,
 
 	miejscowosc VARCHAR(25) NOT NULL,
@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS konta (
 	login VARCHAR(10) NOT NULL,
 	email VARCHAR(30) NOT NULL,
 
-	haslo VARCHAR(32) NOT NULL,
-	salt VARCHAR(8) NOT NULL,
+	haslo VARCHAR(31) NOT NULL,
+	salt  VARCHAR(22) NOT NULL,
 
 	dane_id INT NOT NULL,
 

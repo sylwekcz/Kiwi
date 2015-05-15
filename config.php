@@ -19,4 +19,10 @@ abstract class Config
 	const SQL_USER     = 'root';
 	const SQL_PASSWORD = 'dupadupa7';
 	const SQL_DATABASE = 'kiwi';
+
+
+	/*
+	 * Session config
+	 */
+	const SESSION_TIMEOUT = 30;
 }
