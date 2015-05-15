@@ -2,7 +2,7 @@
 namespace Kiwi;
 
 use InvalidArgumentException;
-use RutimeExcepion;
+use RuntimeException;
 
 
 class Card

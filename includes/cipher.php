@@ -25,7 +25,7 @@ abstract class Cipher
 			$salt = self::generate_salt(10);
 		else
 		{
-			if (!self::_is_valid_salt($salt))
+			if (!self::is_valid_salt($salt))
 				throw new CipherInvalidSaltException;
 
 			$custom_salt = true;
@@ -55,7 +55,7 @@ abstract class Cipher
 		if (!is_string($hash_one) || !is_string($hash_two))
 			throw new InvalidArgumentException;
 
-		if (!self::_is_valid_hash($hash_one) || !self::_is_valid_hash($hash_two))
+		if (!self::is_valid_hash($hash_one) || !self::is_valid_hash($hash_two))
 			throw new UnexpectedValueException;
 
 
@@ -87,10 +87,13 @@ abstract class Cipher
 		return $salt_header . $salt;
 	}
 
-	final private static function _is_valid_salt($salt)
+	final public static function is_valid_salt($salt)
 	{
 		if (!is_string($salt))
 			throw new InvalidArgumentException;
+
+		if (strlen($salt) !== 29)
+			return false;
 
 
 		// Split into header and data
@@ -98,19 +101,19 @@ abstract class Cipher
 		$salt        = substr($salt, 7);
 
 		// Validate header pattern and check salt characters
-		if (!preg_match('/(\$2y\$\d\d\$)/', $salt_header) || !self::_is_valid_hash($salt))
+		if (!preg_match('/(\$2y\$\d\d\$)/', $salt_header) || !self::is_valid_hash($salt))
 			return false;
 
 		return true;
 	}
 
-	final private static function _is_valid_hash($hash)
+	final public static function is_valid_hash($hash)
 	{
 		if (!is_string($hash))
 			throw new InvalidArgumentException;
 
 
-		return !preg_match('/[^\.\/0-9A-Za-z]/', $hash);
+		return (strlen($hash) === 31) && !preg_match('/[^\.\/0-9A-Za-z]/', $hash);
 	}
 }
 

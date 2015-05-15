@@ -1,4 +1,4 @@
-DROP TABLE `card`;
+DROP TABLE `cards`;
 DROP TABLE `accounts`;
 DROP TABLE `sessions`;
 
@@ -57,8 +57,8 @@ CREATE TABLE `sessions`
 
   `last_activity` TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  `browser_ip`    VARCHAR(11) NOT NULL,
-  `browser_agent` VARCHAR(64) NOT NULL,
+  `browser_ip` VARCHAR(15) NOT NULL,
+  `browser_id` VARCHAR(32) NOT NULL,
 
 
   PRIMARY KEY (`session_id`),

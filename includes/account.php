@@ -29,6 +29,9 @@ class Account
 		else
 			throw new InvalidArgumentException;
 
+		if (!is_valid_password($password))
+			throw new InvalidArgumentException;
+
 
 		// Account not found
 		if (!$data = Database::select('accounts', ['account_id', 'login', 'email', 'password_hash', 'password_salt'], $conditions))
