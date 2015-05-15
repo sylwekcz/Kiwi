@@ -3,7 +3,7 @@ namespace Kiwi;
 
 use RuntimeException;
 use InvalidArgumentException;
-use UnexpectedValueException;
+
 
 class Session
 {
@@ -14,83 +14,148 @@ class Session
 	private $_browser_agent = '';
 
 
-	final public function __construct($session_id = 0)
-	{
-		if ($session_id === 0) $this->_authorize();
-		else $this->_load($session_id);
-	}
+	final private function __construct() { }
 
-	final private function _load($session_id)
+
+	final public static function load($session_id)
 	{
 		if (!is_valid_id($session_id))
 			throw new InvalidArgumentException;
 
 
-		// Database failed ?
-		if (!($data = Database::select('sessions', ['account_id', 'browser_ip', 'browser_agent'], ['session_id' => $session_id])))
-			return false;
+		$data = Database::select(
+				Config::SQL_TABLE_SESSIONS,
+				['account_id', 'browser_ip', 'browser_agent'],
+				['session_id' => $session_id]);
 
-		// We expect exactly one record
-		if (count($data) === 0)
-			return false;
-
+		// Not what we have expected...
 		if (count($data) > 1)
 			throw new RuntimeException;
 
+		// Session not found
+		if (empty($data))
+			return false;
 
-		$this->_id            = $session_id;
-		$this->_account_id    = $data[0]['account_id'];
-		$this->_browser_ip    = $data[0]['browser_ip'];
-		$this->_browser_agent = $data[0]['browser_agent'];
 
-		return true;
+		// Session loaded, now store it
+		$session                 = new Session();
+		$session->_id            = $session_id;
+		$session->_account_id    = $data[0]['account_id'];
+		$session->_browser_ip    = $data[0]['browser_ip'];
+		$session->_browser_agent = $data[0]['browser_agent'];
+
+		return $session;
 	}
 
-	final private function _authorize()
+	final public static function authorize()
 	{
 		if (!isset($_COOKIE))
 			return false;
 
-		$session_cookie = $_COOKIE['session'];
 
-		// Load cookie
+		// Cookie contains session key
+		$session_key = $_COOKIE['session'];
 
-		return true;
+		// Something in here but not valid (hacking?)
+		if (!self::is_valid_key($session_key))
+		{
+			// Delete cookie
+			unset($_COOKIE['session']);
+			setcookie('session', null, -1, '/');
+
+			return false;
+		}
+
+
+		// Collect some browser data
+		list ($browser_ip, $browser_agent) = get_browser_info();
+
+		// Is there session like this?
+		$data = Database::select(
+				Config::SQL_TABLE_SESSIONS,
+				['session_id', 'account_id'],
+				['session_key' => $session_key, 'browser_ip' => $browser_ip, 'browser_agent' => $browser_agent]);
+
+		// Table corrupted ?
+		if (count($data) > 1)
+			throw new RuntimeException;
+
+		// Session not found
+		if (empty($data))
+			return false;
+
+
+		// Refresh session
+		$result = Database::update(
+				Config::SQL_TABLE_SESSIONS,
+				['last_activity' => 'CURRENT_TIMESTAMP'],
+				['session_id' => $data[0]['session_id']]);
+
+		// Whoops ?
+		if ($result === 0)
+			return false;
+
+
+		// Store session
+		$session                 = new Session();
+		$session->_id            = $data[0]['session_id'];
+		$session->_account_id    = $data[0]['account_id'];
+		$session->_browser_ip    = $browser_ip;
+		$session->_browser_agent = $browser_agent;
+
+		return $session;
 	}
 
 	final public function close()
 	{
-		//		if (!$this->is_opened())
-		//			return false;
-		//
-		//
-		//		return (Database::delete('sessions', ['session_id' => $this->_id]) !== 0);
+		$result = Database::delete(
+				Config::SQL_TABLE_SESSIONS,
+				['session_id' => $this->_id]);
+
+		return ($result !== 0);
 	}
 
 
 	final public static function open($account_id)
 	{
-		// Open new session and call load
+		if (!is_valid_id($account_id))
+			throw new InvalidArgumentException;
 
-		$session_id = 0;
 
-		return new Session($session_id);
+		// Generate key, simple :)
+		$session_key = Cipher::encrypt(strval($account_id), Cipher::generate_salt(7));
 
-		//		if ($this->is_opened())
-		//			return false;
-		//
-		//
-		//		// Generate key
-		//		$session_key = '';
-		//
-		//
-		//		// Session already opened for this account
-		//		if (!($result = Database::insert('sessions', ['account_id' => $this->_account->get_id()])))
-		//			return false;
-		//
-		//		$this->_account->get_id();
+		// Collect some browser data
+		list ($browser_ip, $browser_agent) = get_browser_info();
 
-		//		return true;
+		// Open session
+		$result = Database::insert(
+				Config::SQL_TABLE_SESSIONS,
+				['account_id' => $account_id, 'session_key' => $session_key, 'browser_ip' => $browser_ip, 'browser_agent' => $browser_agent]);
+
+		// Duplicate data, session already exists for this account
+		if ($result === false)
+			return false;
+
+
+		// Session opened, throw a cookie :>
+		// setcookie('session', $session_key, time() + Config::SESSION_TIMEOUT, '/', null, false, true);
+		setcookie('session', $session_key, time() + Config::SESSION_TIMEOUT, '/');
+
+
+		// Store it
+		$session                 = new Session();
+		$session->_id            = $result;
+		$session->_account_id    = $account_id;
+		$session->_browser_ip    = $browser_ip;
+		$session->_browser_agent = $browser_agent;
+
+		return $session;
+	}
+
+	final public static function find($account_id)
+	{
+		// TODO
 	}
 
 
@@ -101,14 +166,27 @@ class Session
 
 	final public function get_id()
 	{
-
+		// TODO
 	}
 
 	final public function get_account_id()
 	{
+		// TODO
+	}
 
+	final public function get_browser_ip()
+	{
+		// TODO
+	}
+
+	final public function get_browser_agent()
+	{
+		// TODO
+	}
+
+	final public static function is_valid_key($session_key)
+	{
+		// TODO: regex
+		return true;
 	}
 }
-
-
-$session = Session::open(10);

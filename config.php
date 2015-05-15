@@ -20,9 +20,14 @@ abstract class Config
 	const SQL_PASSWORD = 'dupadupa7';
 	const SQL_DATABASE = 'kiwi';
 
+	/*
+	 * MYSQL tables
+	 */
+	const SQL_TABLE_ACCOUNTS = 'accounts';
+	const SQL_TABLE_SESSIONS = 'sessions';
 
 	/*
 	 * Session config
 	 */
-	const SESSION_TIMEOUT = 30;
+	const SESSION_TIMEOUT = 1800;
 }

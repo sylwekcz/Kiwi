@@ -217,7 +217,7 @@ abstract class Database
 	 * @param array  $columns    List of columns to retrieve
 	 * @param array  $conditions Select conditions
 	 *
-	 * @return array|bool Array of results on success, false otherwise
+	 * @return array Array of results on success, false otherwise
 	 */
 	final public static function select($table, $columns, $conditions)
 	{

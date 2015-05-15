@@ -40,6 +40,10 @@ abstract class Cipher
 		// Cut the part we need
 		$hash = substr($blowfish, 29);
 
+		// For sure
+		unset($data);
+		unset($blowfish);
+
 		if ($custom_salt)
 			return $hash;
 

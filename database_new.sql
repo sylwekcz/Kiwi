@@ -53,7 +53,7 @@ CREATE TABLE `sessions`
   `session_id`    INT         NOT NULL AUTO_INCREMENT,
   `account_id`    INT         NOT NULL,
 
-  `session_key`   VARCHAR(32) NOT NULL,
+  `session_key` VARCHAR(31) NOT NULL,
 
   `last_activity` TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

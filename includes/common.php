@@ -22,6 +22,15 @@ function array_references($array, $plain = false)
 	return $references;
 }
 
+function get_browser_info()
+{
+	$browser_ip    = '';
+	$browser_agent = '';
+
+	return [$browser_ip, $browser_agent];
+}
+
+
 /**
  * Make sure given data contains only safe (word) characters
  *
