@@ -99,9 +99,6 @@ class Account
 		$password_hash = Cipher::encrypt($password, $password_salt);
 		$password_salt = substr($password_salt, 7);
 
-		unset($password);
-
-
 		$id = Database::insert(
 				Config::SQL_TABLE_ACCOUNTS,
 				['login' => $login, 'email' => $email, 'password_hash' => $password_hash, 'password_salt' => $password_salt]);

@@ -23,6 +23,7 @@ abstract class Config
 	/*
 	 * MYSQL tables
 	 */
+	const SQL_TABLE_CARDS = 'cards';
 	const SQL_TABLE_ACCOUNTS = 'accounts';
 	const SQL_TABLE_SESSIONS = 'sessions';
 

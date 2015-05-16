@@ -10,6 +10,9 @@ class Session
 	/** @var int Session ID */
 	private $_id = 0;
 
+	/** @var string Session key */
+	private $_key = '';
+
 	/** @var int Account ID */
 	private $_account_id = 0;
 
@@ -19,8 +22,8 @@ class Session
 
 
 	/** @var string Client IP address */
-
 	private $_browser_ip = '';
+
 	/** @var string Client browser ID */
 	private $_browser_id = '';
 
@@ -31,6 +34,30 @@ class Session
 	final private function __construct()
 	{
 
+	}
+
+
+	/**
+	 * Kill session
+	 * @return bool Whenever the session was closed
+	 */
+	final public function kill()
+	{
+		// Cookie present
+		if (isset($_COOKIE['session']))
+		{
+			$key = $_COOKIE['session'];
+
+			// Cookie damaged or keys march (local session)
+			if (!Cipher::is_valid_hash($key) || Cipher::verify($this->_key, $key))
+			{
+				// Delete cookie
+				unset($_COOKIE['session']);
+				setcookie('session', null, -1, '/');
+			}
+		}
+
+		return self::close($this->_id);
 	}
 
 
@@ -49,7 +76,7 @@ class Session
 
 		$data = Database::select(
 				Config::SQL_TABLE_SESSIONS,
-				['account_id', 'last_activity', 'browser_ip', 'browser_id'],
+				['session_key', 'account_id', 'last_activity', 'browser_ip', 'browser_id'],
 				['session_id' => $session_id]);
 
 		// Not what we have expected...
@@ -62,9 +89,10 @@ class Session
 
 
 		// Session loaded, now store it
-		$session              = new Session();
-		$session->_id         = $session_id;
+		$session      = new Session();
+		$session->_id = $session_id;
 
+		$session->_key        = $data[0]['session_key'];
 		$session->_account_id    = $data[0]['account_id'];
 		$session->_last_activity = $data[0]['last_activity'];
 		$session->_browser_ip    = $data[0]['browser_ip'];
@@ -102,8 +130,6 @@ class Session
 				Config::SQL_TABLE_SESSIONS,
 				['session_id'/*, 'account_id'*/],
 				['session_key' => $key, 'browser_ip' => $_SERVER['REMOTE_ADDR'], 'browser_id' => get_browser_id()]);
-
-		unset($key);
 
 		// Table corrupted ?
 		if (count($data) > 1)

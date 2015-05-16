@@ -22,20 +22,24 @@ class Card
 	private $_street       = '';
 
 
+	// TODO
 	// Load
 	final public function __construct($card_id)
 	{
-		if (!is_int($card_id))
+		if (is_valid_id($card_id))
 			throw new InvalidArgumentException;
 
 
-		$fields = ['first_name', 'middle_name', 'surname', 'birth_date', 'phone_number', 'address', 'city', 'postal_code', 'street'];
+		$data = Database::select(
+				Config::SQL_TABLE_CARDS,
+				['first_name', 'middle_name', 'surname', 'birth_date', 'phone_number', 'address', 'city', 'postal_code', 'street'],
+				['card_id' => $card_id]);
 
-		if (!($data = Database::select('cards', $fields, ['card_id' => $card_id])))
-			throw new \RuntimeException;
+		if (count($data) > 1)
+			throw new CardDamagedException;
 
-		if (count($data) !== 1)
-			throw new RuntimeException;
+		if (empty($data))
+			return false;
 
 
 		$this->_data = $data;
@@ -69,4 +73,9 @@ class Card
 	}
 
 
+}
+
+
+class CardDamagedException extends RuntimeException
+{
 }
