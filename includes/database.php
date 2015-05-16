@@ -72,7 +72,7 @@ abstract class Database
 	 * @param string $table Target table
 	 * @param array  $data  Data array consisting of field and value
 	 *
-	 * @return int ID of inserted record on success (positive values only), false on duplicates
+	 * @return int|bool ID of inserted record on success (positive values only), false on duplicates
 	 */
 	final public static function insert($table, $data)
 	{
@@ -190,6 +190,9 @@ abstract class Database
 		if (!is_safe_string($table))
 			throw new UnexpectedValueException;
 
+		if (!self::is_connected())
+			throw new DatabaseNotConnected;
+
 
 		// Prepare for bind_param
 		list ($criteria, $values, $format) = self::_prepare_conditions($criteria);
@@ -233,6 +236,9 @@ abstract class Database
 		if (!is_safe_string($columns))
 			throw new UnexpectedValueException;
 
+		if (!self::is_connected())
+			throw new DatabaseNotConnected;
+
 
 		// Build fields list
 		$fields = implode(', ', $columns);
@@ -265,7 +271,7 @@ abstract class Database
 		}
 
 		// Something went wrong...
-		if (!$meta->field_count != count($columns))
+		if ($meta->field_count != count($columns))
 			throw new RuntimeException;
 
 
@@ -275,7 +281,7 @@ abstract class Database
 
 		// Build field list
 		while ($field = $meta->fetch_field())
-			$result[] = &$row[$field->name];
+			$result[$field->name] = &$row[$field->name];
 
 		$result_handler = [$statement, 'bind_result'];
 
@@ -330,23 +336,27 @@ abstract class Database
 		{
 			foreach ($data as $field => $value)
 			{
+				$special = false;
+
 				// Validate type and build format
 				if (is_int($value)) $format .= 'i';
 				else if (is_string($value)) $format .= 's';
 				else if (is_double($value)) $format .= 'd';
+				else if (is_array($value) && (count($value) === 1) && is_safe_string($value[0])) $special = true;
 				else
 					throw new UnexpectedValueException;
 
 
 				if ($update)
-					$placeholders .= $field . '=?, '; // Column name is required when updating
+					$placeholders .= $field . '=' . ($special ? $value[0] : '?') . ', '; // Column name is required when updating
 				else
 				{
 					$fields .= $field . ', '; // Build field list
-					$placeholders .= '?, ';
+					$placeholders .= ($special ? $value[0] : '?') . ', ';
 				}
 
-				array_push($values, $value); // Build value list
+				if (!$special)
+					array_push($values, $value); // Build value list
 			}
 
 			// Remove last comma space sequence

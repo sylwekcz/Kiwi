@@ -57,13 +57,14 @@ CREATE TABLE `sessions`
 
   `last_activity` TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  `browser_ip` VARCHAR(15) NOT NULL,
-  `browser_id` VARCHAR(32) NOT NULL,
+  `browser_ip`  VARCHAR(15) NOT NULL,
+  `browser_id`  VARCHAR(32) NOT NULL,
 
 
   PRIMARY KEY (`session_id`),
   FOREIGN KEY (`account_id`) REFERENCES `accounts` (`account_id`),
 
+  UNIQUE (`account_id`),
   UNIQUE (`session_key`)
 )
   ENGINE = INNODB;

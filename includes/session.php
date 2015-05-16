@@ -28,7 +28,10 @@ class Session
 	/**
 	 * Disable constructor
 	 */
-	final private function __construct() { }
+	final private function __construct()
+	{
+
+	}
 
 
 	/**
@@ -59,8 +62,8 @@ class Session
 
 
 		// Session loaded, now store it
-		$session                 = new Session();
-		$session->_id            = $session_id;
+		$session              = new Session();
+		$session->_id         = $session_id;
 
 		$session->_account_id    = $data[0]['account_id'];
 		$session->_last_activity = $data[0]['last_activity'];
@@ -77,15 +80,15 @@ class Session
 	 */
 	final public static function authorize()
 	{
-		if (!isset($_COOKIE))
+		if (!isset($_COOKIE['session']))
 			return false;
 
 
 		// Cookie contains session key
-		$session_key = $_COOKIE['session'];
+		$key = $_COOKIE['session'];
 
 		// Something in here but not valid (hacking?)
-		if (Cipher::is_valid_hash($session_key))
+		if (!Cipher::is_valid_hash($key))
 		{
 			// Delete cookie
 			unset($_COOKIE['session']);
@@ -98,9 +101,9 @@ class Session
 		$data = Database::select(
 				Config::SQL_TABLE_SESSIONS,
 				['session_id'/*, 'account_id'*/],
-				['session_key' => $session_key, 'browser_ip' => $_SERVER['REMOTE_ADDR'], 'browser_id' => get_browser_id()]);
+				['session_key' => $key, 'browser_ip' => $_SERVER['REMOTE_ADDR'], 'browser_id' => get_browser_id()]);
 
-		unset($session_key);
+		unset($key);
 
 		// Table corrupted ?
 		if (count($data) > 1)
@@ -108,14 +111,22 @@ class Session
 
 		// Session not found
 		if (empty($data))
-			return false;
+		{
+			// Delete cookie
+			unset($_COOKIE['session']);
+			setcookie('session', null, -1, '/');
 
+			return false;
+		}
+
+
+		$id = $data[0]['session_id'];
 
 		// Refresh session
 		$result = Database::update(
 				Config::SQL_TABLE_SESSIONS,
-				['last_activity' => 'CURRENT_TIMESTAMP'], // TODO: add CURRENT_TIMESTAMP support @database
-				['session_id' => $data[0]['session_id']]);
+				['last_activity' => ['CURRENT_TIMESTAMP']],
+				['session_id' => $id]);
 
 		// Whoops ?
 		if ($result === 0)
@@ -128,7 +139,7 @@ class Session
 		// $session->_browser_ip    = $browser_ip;
 		// $session->_browser_id = $browser_id;
 
-		return self::load($data['session_id']);
+		return self::load($id);
 	}
 
 	/**
@@ -165,21 +176,22 @@ class Session
 
 
 		// Generate key, simple :)
-		$session_key = Cipher::encrypt(strval($account_id), Cipher::generate_salt(7));
+		$key = Cipher::encrypt(strval($account_id), Cipher::generate_salt(7));
 
 		// Open session
-		$result = Database::insert(
+		$id = Database::insert(
 				Config::SQL_TABLE_SESSIONS,
-				['account_id' => $account_id, 'session_key' => $session_key, 'browser_ip' => $_SERVER['REMOTE_ADDR'], 'browser_id' => get_browser_id()]);
+				['account_id' => $account_id, 'session_key' => $key,
+				 'browser_ip' => $_SERVER['REMOTE_ADDR'], 'browser_id' => get_browser_id()]);
 
 		// Duplicate data, session already exists for this account
-		if ($result === false)
+		if ($id === false)
 			return false;
 
 
 		// Session opened, throw a cookie :>
 		// setcookie('session', $session_key, time() + Config::SESSION_TIMEOUT, '/', null, false, true);
-		setcookie('session', $session_key, time() + Config::SESSION_TIMEOUT, '/'); // TODO: test domain and security
+		setcookie('session', $key, time() + Config::SESSION_TIMEOUT, '/');
 
 
 		// $session                 = new Session();
@@ -189,7 +201,7 @@ class Session
 		// $session->_browser_id = $browser_id;
 
 		// Load session data
-		return self::load($result);
+		return self::load($id);
 	}
 
 	/**
@@ -226,7 +238,7 @@ class Session
 		//		$session->_browser_id = $data[0]['browser_id'];
 
 		// Load session data
-		return self::load($data['session_id']);
+		return self::load($data[0]['session_id']);
 	}
 
 
@@ -241,11 +253,20 @@ class Session
 
 	/**
 	 * Get session account ID
-	 * @return int Account ID
+	 * @return int Session account ID
 	 */
 	final public function get_account_id()
 	{
 		return $this->_account_id;
+	}
+
+	/**
+	 * Get session last activity timestamp
+	 * @return int Last client activity timestamp
+	 */
+	final public function get_last_activity()
+	{
+		return $this->_last_activity;
 	}
 
 	/**
@@ -259,13 +280,14 @@ class Session
 
 	/**
 	 * Get session clients browser ID
-	 * @return string Client User Agent
+	 * @return string Client browser ID
 	 */
 	final public function get_browser_id()
 	{
 		return $this->_browser_id;
 	}
 }
+
 
 class SessionCorruptedException extends RuntimeException
 {

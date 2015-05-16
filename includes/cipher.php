@@ -101,7 +101,7 @@ abstract class Cipher
 		$salt        = substr($salt, 7);
 
 		// Validate header pattern and check salt characters
-		if (!preg_match('/(\$2y\$\d\d\$)/', $salt_header) || !self::is_valid_hash($salt))
+		if (!preg_match('/(\$2y\$\d\d\$)/', $salt_header) || preg_match('/[^\.\/0-9A-Za-z]/', $salt))
 			return false;
 
 		return true;

@@ -43,7 +43,7 @@ function get_browser_id()
  */
 function is_safe_string($data)
 {
-	return ((is_string($data) && preg_match('/(\W)/', $data)) || (is_array($data) && preg_grep('/(\W)/', $data)));
+	return ((is_string($data) && !preg_match('/(\W)/', $data)) || (is_array($data) && !preg_grep('/(\W)/', $data)));
 }
 
 /**

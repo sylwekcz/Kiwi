@@ -18,7 +18,7 @@ abstract class Config
 	const SQL_HOST     = 'localhost';
 	const SQL_USER     = 'root';
 	const SQL_PASSWORD = 'dupadupa7';
-	const SQL_DATABASE = 'kiwi';
+	const SQL_DATABASE = 'kiwi2';
 
 	/*
 	 * MYSQL tables
