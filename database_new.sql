@@ -3,6 +3,7 @@ DROP TABLE `accounts`;
 DROP TABLE `sessions`;
 
 
+/* ACCOUNTS AND RELATED */
 CREATE TABLE `cards`
 (
   `card_id`      INT         NOT NULL AUTO_INCREMENT,
@@ -13,7 +14,6 @@ CREATE TABLE `cards`
   `birth_date`   DATETIME    NOT NULL,
 
   `phone_number` VARCHAR(12) NOT NULL,
-
   `address`      VARCHAR(10) NOT NULL,
   `city`         VARCHAR(25) NOT NULL,
   `postal_code`  VARCHAR(5)  NOT NULL,
@@ -23,7 +23,8 @@ CREATE TABLE `cards`
   PRIMARY KEY (`card_id`),
   UNIQUE (`first_name`, `middle_name`, `surname`, `birth_date`),
   UNIQUE (`phone_number`)
-);
+)
+  ENGINE = INNODB;
 
 CREATE TABLE `accounts`
 (
@@ -66,5 +67,21 @@ CREATE TABLE `sessions`
 
   UNIQUE (`account_id`),
   UNIQUE (`session_key`)
+)
+  ENGINE = INNODB;
+
+
+/* LECTOR AND RELATED */
+CREATE TABLE `languages`
+(
+  `language_id` INT         NOT NULL AUTO_INCREMENT,
+
+  `name`        VARCHAR(20) NOT NULL,
+  `level`       CHAR(2)     NOT NULL,
+
+
+  PRIMARY KEY (`language_id`),
+
+  UNIQUE (`name`, `level`)
 )
   ENGINE = INNODB;

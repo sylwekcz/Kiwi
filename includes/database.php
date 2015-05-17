@@ -47,8 +47,8 @@ abstract class Database
 		self::$_handle = new mysqli($host, $user, $password, $database);
 
 		// Connection failed, bad config might it be...
-		if (!self::$_handle)
-			throw new DatabaseFailedException;
+		if (self::$_handle->connect_errno)
+			throw new DatabaseFailedException('Server response was ' . self::$_handle->connect_errno);
 	}
 
 	/**
@@ -117,7 +117,7 @@ abstract class Database
 			if ($statement->errno == 1062)
 				return false;
 
-			throw new DatabaseQueryExecutionFailedException;
+			throw new DatabaseQueryExecutionFailedException('Server response was ' . self::$_handle->connect_errno);
 		}
 
 		// Something went wrong
@@ -176,7 +176,7 @@ abstract class Database
 
 		// Run query
 		if (!$statement->execute())
-			throw new DatabaseQueryExecutionFailedException;
+			throw new DatabaseQueryExecutionFailedException('Server response was ' . self::$_handle->connect_errno);
 
 
 		return ($statement->affected_rows !== 0) ? $statement->affected_rows : false;
@@ -224,10 +224,10 @@ abstract class Database
 
 		// Run query
 		if (!$statement->execute())
-			throw new DatabaseQueryExecutionFailedException;
+			throw new DatabaseQueryExecutionFailedException('Server response was ' . self::$_handle->connect_errno);
 
 
-		return ($statement->affected_rows !== 0) ? $statement->affected_rows : false;
+		return ($statement->affected_rows > 0) ? $statement->affected_rows : false;
 	}
 
 	/**
@@ -278,7 +278,7 @@ abstract class Database
 
 		// Run
 		if (!$statement->execute())
-			throw new DatabaseQueryExecutionFailedException;
+			throw new DatabaseQueryExecutionFailedException('Server response was ' . self::$_handle->connect_errno);
 
 
 		// Lets see what was returned
@@ -293,7 +293,7 @@ abstract class Database
 
 		// Something went wrong...
 		if ($meta->field_count != count($columns))
-			throw new DatabaseQueryResultInvalidException;
+			throw new DatabaseQueryResultInvalidException('Expected ' . count($columns) . ' fields but ' . $meta->field_count . ' returned');
 
 
 		// Buffer returned data
@@ -301,7 +301,7 @@ abstract class Database
 		$result = [];
 
 		// Build field list
-		while ($field = $meta->fetch_field())
+		while ($field = $meta->fetch_field()) // TODO: review
 			$result[$field->name] = &$row[$field->name];
 
 		$result_handler = [$statement, 'bind_result'];
@@ -387,7 +387,7 @@ abstract class Database
 				if (is_int($value)) $format .= 'i';
 				else if (is_string($value)) $format .= 's';
 				else if (is_double($value)) $format .= 'd';
-				else if (is_array($value) && (count($value) === 1) && is_safe_string($value[0])) $special = true;
+				else if (is_array($value) && (count($value) == 1) && is_safe_string($value[0])) $special = true;
 				else
 					throw new InvalidArgumentException;
 
@@ -491,12 +491,12 @@ abstract class Database
 
 				// Operators allowed: null = != > < !< !> >= <= <> % !%
 				if (!preg_match('/^( |=|!=|>|<|>=|<=|<>|%|!%)$/', $operator))
-					throw new InvalidArgumentException;
+					throw new InvalidArgumentException();
 
 
 				// Convert special operators
-				if ($operator === '%') $operator = 'LIKE';
-				else if ($operator === '!%') $operator = 'NOT LIKE';
+				if ($operator == '%') $operator = 'LIKE';
+				else if ($operator == '!%') $operator = 'NOT LIKE';
 
 				$criteria .= $field . ' ' . $operator . ' ? AND ';
 				array_push($values, $value);

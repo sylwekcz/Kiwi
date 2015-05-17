@@ -1,8 +1,8 @@
 <?php
 namespace Kiwi;
 
-use RuntimeException;
 use InvalidArgumentException;
+use RuntimeException;
 
 
 /**
@@ -63,7 +63,7 @@ class Session
 
 		// Not what we have expected...
 		if (count($data) > 1)
-			throw new SessionCorruptedException;
+			throw new SessionCorruptedException('Query returned ' . count($data) . ' rows');
 
 		// Session not found
 		if (empty($data))
@@ -119,7 +119,7 @@ class Session
 
 		// Table corrupted
 		if (count($data) > 1)
-			throw new SessionCorruptedException;
+			throw new SessionCorruptedException('Query returned ' . count($data) . ' rows');
 
 		// Session not found
 		if (empty($data))
@@ -142,7 +142,7 @@ class Session
 				['session_id' => $id]);
 
 		// Cannot update session, whoops ?
-		if ($result === 0)
+		if (!$result)
 			return false;
 
 
@@ -169,7 +169,7 @@ class Session
 				Config::SQL_TABLE_SESSIONS,
 				['session_id' => $session_id]);
 
-		return ($result !== 0);
+		return ($result != false);
 	}
 
 	/**
@@ -230,7 +230,7 @@ class Session
 
 		// Table corrupted
 		if (count($data) > 1)
-			throw new SessionCorruptedException;
+			throw new SessionCorruptedException('Query returned ' . count($data) . ' rows');
 
 		// Account is offline
 		if (empty($data))

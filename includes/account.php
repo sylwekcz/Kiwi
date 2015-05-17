@@ -1,8 +1,8 @@
 <?php
 namespace Kiwi;
 
-use RuntimeException;
 use InvalidArgumentException;
+use RuntimeException;
 
 
 /**
@@ -56,8 +56,8 @@ class Account
 				['account_id' => $account_id]);
 
 		// Table corrupter
-		if (!count($data) > 1)
-			throw new AccountDamagedException;
+		if (count($data) > 1)
+			throw new AccountDamagedException('Query returned ' . count($data) . ' rows');
 
 		// Account not found
 		if (empty($data))
@@ -107,7 +107,7 @@ class Account
 
 		// Some kind of mess in database there is
 		if (count($data) > 1)
-			throw new AccountDamagedException;
+			throw new AccountDamagedException('Query returned ' . count($data) . ' rows');
 
 		// Account not found
 		if (empty($data))
@@ -189,7 +189,7 @@ class Account
 				Config::SQL_TABLE_ACCOUNTS,
 				['account_id' => $account_id]);
 
-		return ($result !== 0);
+		return ($result != false);
 	}
 
 

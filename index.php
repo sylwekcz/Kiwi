@@ -47,7 +47,9 @@ var_dump(Cipher::encrypt('test', $salt));*/
 //var_dump($a = Session::find(1));
 //var_dump(Session::close($a->get_id()));
 //var_dump(Session::close(17));
-
-//var_dump(Account::create('aaaaa', 'dupa@dupa.dup', 'test1234'));
-var_dump($a = Account::authorize('aaaaa', 'test1234'));
-var_dump(Account::delete($a->get_id()));
+//
+var_dump(Account::create('dupaaasaaaaa', 'dupasaaaaa@dupa.com', 'dupa123'));
+//var_dump($a = Account::authorize('dupaaa', 'test1234'));
+//var_dump(Account::delete($a->get_id()));
+//var_dump($s = Session::open($a->get_id()));
+//var_dump($s->kill());

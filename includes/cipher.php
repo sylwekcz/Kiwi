@@ -23,7 +23,7 @@ abstract class Cipher
 	 * @throws CipherSaltCostInvalidException On invalid salt
 	 * @throws CipherEncryptionFailedException On hashing fail (wrongly built salt?)
 	 */
-	final public static function encrypt($data, $salt = '')
+	final public static function encrypt($data = '', $salt = '')
 	{
 		if (!is_string($data) || !is_string($salt))
 			throw new InvalidArgumentException;
@@ -133,7 +133,7 @@ abstract class Cipher
 			throw new InvalidArgumentException;
 
 		// Header - 7, salt - 22 bytes
-		if (strlen($salt) !== 29)
+		if (strlen($salt) != 29)
 			return false;
 
 
@@ -163,7 +163,7 @@ abstract class Cipher
 			throw new InvalidArgumentException;
 
 
-		return (strlen($hash) === 31) && !preg_match('/[^\.\/0-9A-Za-z]/', $hash);
+		return (strlen($hash) == 31) && !preg_match('/[^\.\/0-9A-Za-z]/', $hash);
 	}
 }
 
