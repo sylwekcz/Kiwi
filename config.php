@@ -31,4 +31,5 @@ abstract class Config
 	 * Session config
 	 */
 	const SESSION_TIMEOUT = 1800;
+	const SESSION_COOKIE  = 'kiwi_session';
 }
