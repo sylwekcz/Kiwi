@@ -196,7 +196,7 @@ class Session
 				 'browser_ip' => $_SERVER['REMOTE_ADDR'], 'browser_id' => get_browser_id()]);
 
 		// Duplicate data, session already exists for this account
-		if ($id === false)
+		if (!$id)
 			return false;
 
 

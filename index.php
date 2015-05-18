@@ -4,6 +4,7 @@ namespace Kiwi;
 require_once('./config.php');
 
 require_once('./includes/database.php');
+require_once('./includes/card.php');
 require_once('./includes/account.php');
 require_once('./includes/template.php');
 require_once('./includes/common.php');
@@ -48,8 +49,16 @@ var_dump(Cipher::encrypt('test', $salt));*/
 //var_dump(Session::close($a->get_id()));
 //var_dump(Session::close(17));
 //
-var_dump(Account::create('dupaaasaaaaa', 'dupasaaaaa@dupa.com', 'dupa123'));
+//var_dump(Account::create('dupaaasaaaaa', 'dupasaaaaa@dupa.com', 'dupa123'));
 //var_dump($a = Account::authorize('dupaaa', 'test1234'));
 //var_dump(Account::delete($a->get_id()));
 //var_dump($s = Session::open($a->get_id()));
 //var_dump($s->kill());
+
+var_dump(Card::create(['first_name' => 'a', 'middle_name' => 'b', 'surname' => 'c', 'birth_date' => 0, 'phone_number' => 'd', 'address' => 'e', 'city' => 'f', 'postal_code' => 'g', 'street' => 'j']));
+$c = Card::load(1);
+$c->set_field('phone_number', 'b');
+var_dump($c);
+$c->update();
+var_dump($c);
+

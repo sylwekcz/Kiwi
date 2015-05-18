@@ -7,9 +7,15 @@ use RuntimeException;
 
 class Card
 {
+	const FIELDS = ['first_name' => 'string', 'middle_name' => 'string', 'surname' => 'string',
+					'birth_date' => 'integer', 'phone_number' => 'string', 'address' => 'string',
+					'city'       => 'string', 'postal_code' => 'string', 'street' => 'string'];
+
+	/** @var int Card ID */
 	private $_id = 0;
 
-	private $_fields = [[]];
+	/** @var array Card fields together with modified status */
+	private $_fields = [];
 
 
 	/**
@@ -19,6 +25,7 @@ class Card
 	{
 
 	}
+
 
 	/**
 	 * Load card data
@@ -38,7 +45,7 @@ class Card
 
 		$data = Database::select(
 				Config::SQL_TABLE_CARDS,
-				['first_name', 'middle_name', 'surname', 'birth_date', 'phone_number', 'address', 'city', 'postal_code', 'street'],
+				array_keys(self::FIELDS),
 				['card_id' => $card_id]);
 
 		// Table corrupted
@@ -49,6 +56,8 @@ class Card
 		if (empty($data))
 			return false;
 
+
+		$data = $data[0];
 
 		// Store what was loaded
 		$card      = new Card();
@@ -63,15 +72,61 @@ class Card
 		return $card;
 	}
 
-	final public static function create($data)
+	/**
+	 * Build new card and fill it with given data
+	 *
+	 * @param array $fields Array of fields consisting of name and value, ie: ['first_name' => 'Bob', 'surname' => 'Marley']
+	 *
+	 * @return Card|bool Card object when operation finished without any conflicts, false for duplicates
+	 *
+	 * @throws InvalidArgumentException On invalid input
+	 */
+	final public static function create($fields)
 	{
-		/*$id = Database::insert(
+		// No duplicate keys
+		if (count(self::FIELDS) !== count(array_unique(array_keys($fields))))
+			throw new InvalidArgumentException;
+
+
+		// Make sure fields are correct, no trash
+		foreach ($fields as $name => $value)
+			if (!self::_is_valid_field([$name => $value]))
+				throw new InvalidArgumentException;
+
+
+		$id = Database::insert(
 				Config::SQL_TABLE_CARDS,
-				['first_name' => '']);
+				$fields);
+
+		// Already exists!
+		if (!$id)
+			return false;
 
 
-		return self::load($id);*/
+		return self::load($id);
 	}
+
+	/**
+	 * Make sure field exists and is of valid type
+	 *
+	 * @param array $field Array consisting of field name and value, ie: ['name' => 'bob']
+	 *
+	 * @return bool Whenever field is valid
+	 */
+	final private static function _is_valid_field($field)
+	{
+		if (!is_array($field) || (count($field) != 1))
+			return false;
+
+
+		// Compare with field list, also check type
+		foreach (self::FIELDS as $name => $value)
+			if (isset($field[$name]) && (gettype($field[$name]) === $value))
+				return true;
+
+		return false;
+	}
+
 
 	/**
 	 * Synchronize card data
@@ -111,7 +166,7 @@ class Card
 
 
 		// Everything is up-to-date
-		foreach ($this->_fields as $name => $data)
+		foreach ($this->_fields as $name => &$data)
 			$data['modified'] = false;
 
 
@@ -156,19 +211,14 @@ class Card
 	 * @param string $name  Target field name
 	 * @param mixed  $value New value, empty data not allowed
 	 *
-	 * @return bool Whenever variable exists and has been changed
+	 * @return bool Whenever variable has been modified
+	 *
+	 * @throws InvalidArgumentException On invalid input
 	 */
 	final public function set_field($name, $value)
 	{
-		if (empty($value))
+		if (!self::_is_valid_field([$name => $value]))
 			throw new InvalidArgumentException;
-
-		if (!isset($this->_fields[$name]))
-			return false;
-
-		// Must be of same type
-		if (gettype($this->_fields['value']) != gettype($value))
-			return false;
 
 
 		$this->_fields[$name]['value']    = $value;
