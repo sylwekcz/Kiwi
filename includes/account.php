@@ -19,26 +19,39 @@ class Account
 	/** @var string Account email address, alternately with $_login for authorization */
 	private $_email = '';
 
-	/** @var int Account Card ID */
-	private $_card_id = 0;
+	/** @var string User first name */
+	private $name = '';
+	/** @var string User surname */
+	private $_surname = '';
+
+	/** @var int User birth date */
+	private $_birth_date = '';
 
 
 	/**
 	 * Initialize variables
 	 *
-	 * @param int    $id      Account ID
-	 * @param string $login   Account login
-	 * @param string $email   Account email
-	 * @param int    $card_id Account card ID
+	 * @param int    $id         Account ID
+	 * @param string $login      Account login
+	 * @param string $email      Account email
+	 *
+	 * @param string $name       User name
+	 * @param string $surname    User surname
+	 *
+	 * @param int    $birth_date User birth date
+	 *
 	 */
-	final private function __construct($id, $login, $email, $card_id)
+	final private function __construct($id, $login, $email, $name, $surname, $birth_date)
 	{
 		$this->_id = $id;
 
 		$this->_login = $login;
 		$this->_email = $email;
 
-		$this->_card_id = $card_id;
+		$this->name     = $name;
+		$this->_surname = $surname;
+
+		$this->_birth_date = $birth_date;
 	}
 
 
@@ -63,7 +76,11 @@ class Account
 			[
 				'login',
 				'email',
-				'card_id',
+
+				'name',
+				'surname',
+
+				'birth_date',
 			],
 			['account_id' => $id],
 			true
@@ -78,9 +95,14 @@ class Account
 		$account = new Account
 		(
 			$id,
+
 			$data['login'],
 			$data['email'],
-			$data['card_id']
+
+			$data['name'],
+			$data['surname'],
+
+			$data['birth_date']
 		);
 
 		return $account;
@@ -98,12 +120,12 @@ class Account
 	 */
 	final public static function authorize($login, $password)
 	{
-		if (is_valid_login($login)) $conditions['login'] = $login;
-		else if (is_valid_email($login)) $conditions['email'] = $login; // Users can also login with email
+		if (self::_is_valid_login($login)) $conditions['login'] = $login;
+		else if (self::_is_valid_email($login)) $conditions['email'] = $login; // Users can also login with email
 		else
 			throw new InvalidArgumentException;
 
-		if (!is_valid_password($password))
+		if (!self::_is_valid_password($password))
 			throw new InvalidArgumentException;
 
 
@@ -112,6 +134,7 @@ class Account
 			Config::SQL_TABLE_ACCOUNTS,
 			[
 				'account_id',
+
 				'password_hash',
 				'password_salt',
 			],
@@ -137,22 +160,30 @@ class Account
 	/**
 	 * Create new account
 	 *
-	 * @param string $login    Account login consisting of small/big letters,
-	 *                         digits and underlines with at least 5 and at most 16 characters
-	 * @param string $email    Account email address, at most 30 characters
-	 * @param string $password Account password everything allowed but at least 5 characters
-	 * @param Card   $card     Card object that will be used for this account
+	 * @param string $login      Account login consisting of small/big letters,
+	 *                           digits and underlines with at least 5 and at most 16 characters
+	 * @param string $email      Account email address, at most 30 characters
+	 *
+	 * @param string $password   Account password everything allowed but at least 5 characters
+	 *
+	 * @param string $name       User name
+	 * @param string $surname    User surname
+	 *
+	 * @param int    $birth_date User birth date
 	 *
 	 * @return bool|Account Account object when account was created, false for duplicate
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 */
-	public static function create($login, $email, $password, $card)
+	public static function create($login, $email, $password, $name, $surname, $birth_date)
 	{
-		if (!is_valid_login($login) || !is_valid_email($email) || !is_valid_password($password))
+		if (!self::_is_valid_login($login) || !self::_is_valid_email($email) || !self::_is_valid_password($password))
 			throw new InvalidArgumentException;
 
-		if (!$card instanceof Card)
+		if (!self::_is_valid_name($name) || !self::_is_valid_surname($surname))
+			throw new InvalidArgumentException;
+
+		if (!self::_is_valid_birth_date($birth_date))
 			throw new InvalidArgumentException;
 
 
@@ -169,9 +200,14 @@ class Account
 			[
 				'login'         => $login,
 				'email'         => $email,
+
 				'password_hash' => $password_hash,
 				'password_salt' => $password_salt,
-				'card_id'       => $card->get_id(),
+
+				'name'       => $name,
+				'surname'    => $surname,
+
+				'birth_date' => $birth_date,
 			]
 		);
 
@@ -206,26 +242,120 @@ class Account
 
 
 	/**
+	 * Make sure login is in correct format
+	 *
+	 * @param string $login String to verify
+	 *
+	 * @return bool Whenever login is in valid format
+	 */
+	final private static function _is_valid_login($login)
+	{
+		return
+			is_string($login) &&
+			preg_match('/^[a-zA-Z0-9_]{5,16}$/', $login);
+	}
+
+	/**
+	 * Make sure email is in correct format
+	 *
+	 * @param string $email String to verify
+	 *
+	 * @return bool Whenever emails is in valid format
+	 */
+	final private static function _is_valid_email($email)
+	{
+		return
+			is_string($email) &&
+			preg_match('/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/', $email);
+	}
+
+	/**
+	 * Make sure password is in correct format
+	 *
+	 * @param string $password String to verify
+	 *
+	 * @return bool Whenever password is in valid format
+	 */
+	final private static function _is_valid_password($password)
+	{
+		return
+			is_string($password) &&
+			(strlen($password) > Config::ACCOUNT_PASSWORD_MIN_LENGTH) &&
+			(strlen($password) < Config::ACCOUNT_PASSWORD_MAX_LENGTH);
+	}
+
+	/**
+	 * Make sure name is valid
+	 *
+	 * @param string $name Name to test
+	 *
+	 * @return bool Whenever name is valid
+	 */
+	final private static function _is_valid_name($name)
+	{
+		return
+			is_string($name) &&
+			preg_match('/^[a-zA-Z]{3,' . Config::ACCOUNT_NAME_LENGTH . '}/', $name);
+	}
+
+	/**
+	 * Make sure surname is valid
+	 *
+	 * @param string $surname Surname to test
+	 *
+	 * @return bool Whenever surname is valid
+	 */
+	final private static function _is_valid_surname($surname)
+	{
+		return
+			is_string($surname) &&
+			preg_match('/^[a-zA-Z]{3,' . Config::ACCOUNT_SURNAME_LENGTH . '}/', $surname);
+	}
+
+	/**
+	 * Make sure birth day is correct
+	 *
+	 * @param string $birth_date Birth day timestamp to test
+	 *
+	 * @return bool Whenever birth day is valid
+	 */
+	final private static function _is_valid_birth_date($birth_date)
+	{
+		return
+			is_string($birth_date) &&
+			preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $birth_date, $matches) &&
+			checkdate($matches[2], $matches[3], $matches[1]);
+	}
+
+	/**
 	 * Update account data
 	 *
-	 * @param string $login    Optional. New login
-	 * @param string $email    Optional. New email
-	 * @param string $password Optional. New password
-	 * @param Card   $card     Optional. New Card object
+	 * @param string $login      Optional. New login
+	 * @param string $email      Optional. New email
+	 *
+	 * @param string $password   Optional. New password
+	 *
+	 * @param string $name       Optional. New user name
+	 * @param string $surname    Optional. New user surname
+	 *
+	 * @param string $birth_date Optional. New user birth date
 	 *
 	 * @return bool True on successfully updated account, false if no changes were performed
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 */
-	final public function update($login = '', $email = '', $password = '', $card = null)
+	final public function update($login = '', $email = '', $password = '', $name = '', $surname = '', $birth_date = '')
 	{
-		if ((!empty($login) && !is_valid_login($login)) || (!empty($email) && !is_valid_email($email)))
+		if ((!empty($login) && !self::_is_valid_login($login)) || (!empty($email) && !self::_is_valid_email($email)))
 			throw new InvalidArgumentException;
 
-		if (!empty($password) && !is_valid_password($password))
+		if (!empty($password) && !self::_is_valid_password($password))
 			throw new InvalidArgumentException;
 
-		if (($card !== null) && (!$card instanceof Card))
+		if ((!empty($name) && !self::_is_valid_name($name)) || (!empty($surname) && !self::_is_valid_surname($surname)))
+			throw new InvalidArgumentException;
+
+		if (!empty($birth_date) && !self::_is_valid_birth_date($birth_date))
 			throw new InvalidArgumentException;
 
 
@@ -243,9 +373,10 @@ class Account
 			$fields['password_salt'] = substr($password_salt, 7); // Skip header
 		}
 
-		// Card specified
-		if ($card !== null)
-			$fields['card_id'] = $card->get_id();
+		if (!empty($name)) $fields['name'] = $name;
+		if (!empty($surname)) $fields['surname'] = $surname;
+
+		if (!empty($birth_date)) $fields['birth_date'] = $birth_date;
 
 
 		// Nothing to update
@@ -262,7 +393,6 @@ class Account
 
 		return ($result != false);
 	}
-
 
 	/**
 	 * Get account ID
@@ -286,9 +416,24 @@ class Account
 	final public function get_email() { return $this->_email; }
 
 	/**
-	 * Get account card ID
+	 * Get user name
 	 *
-	 * @return int Account card ID
+	 * @return string User name
 	 */
-	final public function get_card_id() { return $this->_card_id; }
+	final public function get_name() { return $this->name; }
+
+	/**
+	 * Get user surname
+	 *
+	 * @return string User surname
+	 */
+	final public function get_surname() { return $this->_surname; }
+
+	/**
+	 * Get user birth date
+	 *
+	 * @return string User birth date
+	 */
+	final public function get_birth_date() { return $this->_birth_date; }
+
 }
