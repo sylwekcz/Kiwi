@@ -21,7 +21,7 @@ abstract class Config
 	const SQL_DATABASE = 'kiwi2';
 
 	/*
-	 * MYSQL tables
+	 * sMYSQL tables
 	 */
 	const SQL_TABLE_CARDS = 'cards';
 	const SQL_TABLE_ACCOUNTS = 'accounts';
