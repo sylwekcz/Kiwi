@@ -32,9 +32,22 @@ abstract class Config
 
 	const SQL_TABLE_ROOMS   = 'rooms';
 	const SQL_TABLE_COURSES = 'courses';
-	const SQL_TABLE_GROUPS  = 'groups';
+
+	const SQL_TABLE_GROUPS            = 'groups';
+	const SQL_TABLE_GROUP_ASSIGNMENTS = 'group_assignments';
+	const SQL_TABLE_GROUP_MEETINGS    = 'group_meetings';
 
 	const SQL_TABLE_LANGUAGES = 'languages';
+
+
+	/*
+	 * Account config
+	 */
+	const ACCOUNT_PASSWORD_MIN_LENGTH = 5;
+	const ACCOUNT_PASSWORD_MAX_LENGTH = 32;
+
+	const ACCOUNT_NAME_LENGTH    = 25;
+	const ACCOUNT_SURNAME_LENGTH = 30;
 
 	/*
 	 * Session config

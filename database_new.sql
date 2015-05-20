@@ -110,10 +110,10 @@ CREATE TABLE `courses`
 DROP TABLE IF EXISTS `rooms`;
 CREATE TABLE `rooms`
 (
-  `room_id`  INT   UNSIGNED NOT NULL AUTO_INCREMENT,
+  `room_id`  INT   UNSIGNED     NOT NULL AUTO_INCREMENT,
 
-  `number`   VARCHAR(5)     NOT NULL,
-  `capacity` SMALLINT       NOT NULL,
+  `number`   VARCHAR(5)         NOT NULL,
+  `capacity` SMALLINT  UNSIGNED NOT NULL,
 
 
   PRIMARY KEY (`room_id`),
@@ -179,12 +179,12 @@ CREATE TABLE `group_assignments`
 DROP TABLE IF EXISTS `group_meetings`;
 CREATE TABLE `group_meetings`
 (
-  `group_id` INT UNSIGNED NOT NULL,
-  `room_id`  INT UNSIGNED NOT NULL,
+  `group_id` INT UNSIGNED                                                     NOT NULL,
+  `room_id`  INT UNSIGNED                                                     NOT NULL,
 
-  `weekday`  CHAR(1)      NOT NULL,
-  `time`     TIME(5)      NOT NULL,
-  `duration` SMALLINT     NOT NULL,
+  `weekday`  ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', '') NOT NULL,
+  `time`     TIME(5)                                                          NOT NULL,
+  `duration` SMALLINT UNSIGNED                                                NOT NULL,
 
 
   FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`)
@@ -194,5 +194,5 @@ CREATE TABLE `group_meetings`
     ON DELETE CASCADE
     ON UPDATE CASCADE,
 
-  UNIQUE (`room_id`, `date`)
+  UNIQUE (`room_id`, `weekday`, `time`)
 )
