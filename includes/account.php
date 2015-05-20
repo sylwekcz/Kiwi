@@ -2,11 +2,11 @@
 namespace Kiwi;
 
 use InvalidArgumentException;
-use RuntimeException;
 
 
 /**
  * Accounts
+ *
  * @package Kiwi
  */
 class Account
@@ -16,63 +16,72 @@ class Account
 
 	/** @var string Account login, alternately with $_email for authorization */
 	private $_login = '';
-
 	/** @var string Account email address, alternately with $_login for authorization */
 	private $_email = '';
 
-
-	/** @var int Account card ID */
+	/** @var int Account Card ID */
 	private $_card_id = 0;
 
 
 	/**
-	 * Disable constructor
+	 * Initialize variables
+	 *
+	 * @param int    $id      Account ID
+	 * @param string $login   Account login
+	 * @param string $email   Account email
+	 * @param int    $card_id Account card ID
 	 */
-	final private function __construct()
+	final private function __construct($id, $login, $email, $card_id)
 	{
+		$this->_id = $id;
 
+		$this->_login = $login;
+		$this->_email = $email;
+
+		$this->_card_id = $card_id;
 	}
 
 
 	/**
 	 * Load account data
 	 *
-	 * @param int $account_id Target account ID
+	 * @param int $id Target account ID
 	 *
-	 * @return Account|bool Account object when everything was loaded, false for invalid account
+	 * @return bool|Account Account object when everything was loaded, false for invalid account
 	 *
 	 * @throws InvalidArgumentException On invalid input
-	 * @throws AccountDamagedException When account is damaged on server-side
 	 */
-	final public static function load($account_id)
+	final public static function load($id)
 	{
-		if (!is_valid_id($account_id))
+		if (!is_valid_id($id))
 			throw new InvalidArgumentException;
 
 
-		$data = Database::select(
-				Config::SQL_TABLE_ACCOUNTS,
-				['login', 'email', 'card_id'],
-				['account_id' => $account_id]);
-
-		// Table corrupter
-		if (count($data) > 1)
-			throw new AccountDamagedException('Query returned ' . count($data) . ' rows');
+		$data = Database::select
+		(
+			Config::SQL_TABLE_ACCOUNTS,
+			[
+				'login',
+				'email',
+				'card_id',
+			],
+			['account_id' => $id],
+			true
+		);
 
 		// Account not found
-		if (empty($data))
+		if (!$data)
 			return false;
 
 
-		$data = $data[0]; // Simplify
-
 		// Store data
-		$account      = new Account();
-		$account->_id = $account_id;
-
-		$account->_login   = $data['login'];
-		$account->_email   = $data['email'];
-		$account->_card_id = $data['card_id'];
+		$account = new Account
+		(
+			$id,
+			$data['login'],
+			$data['email'],
+			$data['card_id']
+		);
 
 		return $account;
 	}
@@ -83,10 +92,9 @@ class Account
 	 * @param string $login    Account login/email
 	 * @param string $password Account password
 	 *
-	 * @return Account|bool Account object when login and password matches, false for invalid account
+	 * @return bool|Account Account object when login and password matches, false for invalid account
 	 *
 	 * @throws InvalidArgumentException On invalid input
-	 * @throws AccountDamagedException When account is damaged on server-side
 	 */
 	final public static function authorize($login, $password)
 	{
@@ -99,22 +107,22 @@ class Account
 			throw new InvalidArgumentException;
 
 
-		$data = Database::select(
-				Config::SQL_TABLE_ACCOUNTS,
-				['account_id', 'password_hash', 'password_salt'],
-				$conditions);
-
-
-		// Some kind of mess in database there is
-		if (count($data) > 1)
-			throw new AccountDamagedException('Query returned ' . count($data) . ' rows');
+		$data = Database::select
+		(
+			Config::SQL_TABLE_ACCOUNTS,
+			[
+				'account_id',
+				'password_hash',
+				'password_salt',
+			],
+			$conditions,
+			true
+		);
 
 		// Account not found
-		if (empty($data))
+		if (!$data)
 			return false;
 
-
-		$data = $data[0]; // Simplify
 
 		// Prepare salt
 		$password_salt = '$2y$10$' . $data['password_salt'];
@@ -123,71 +131,134 @@ class Account
 		if (!Cipher::verify($data['password_hash'], Cipher::encrypt($password, $password_salt)))
 			return false;
 
-
-		// Paranoid
-		$id = $data['account_id'];
-		unset($password_salt);
-		unset($data);
-
-		return self::load($id);
+		return self::load($data['account_id']);
 	}
 
 	/**
 	 * Create new account
 	 *
-	 * @param string $login    Account login consisting of small/big letters, digits and underlines with at least 5 and at most 16 characters
+	 * @param string $login    Account login consisting of small/big letters,
+	 *                         digits and underlines with at least 5 and at most 16 characters
 	 * @param string $email    Account email address, at most 30 characters
 	 * @param string $password Account password everything allowed but at least 5 characters
+	 * @param Card   $card     Card object that will be used for this account
 	 *
-	 * @return Account|bool Account object when account was created, false for duplicate
+	 * @return bool|Account Account object when account was created, false for duplicate
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 */
-	final public static function create($login, $email, $password)
+	public static function create($login, $email, $password, $card)
 	{
 		if (!is_valid_login($login) || !is_valid_email($email) || !is_valid_password($password))
 			throw new InvalidArgumentException;
 
+		if (!$card instanceof Card)
+			throw new InvalidArgumentException;
+
+
+		// TODO: check first
 
 		// Encrypt password
 		$password_salt = Cipher::generate_salt(10);
 		$password_hash = Cipher::encrypt($password, $password_salt);
 		$password_salt = substr($password_salt, 7); // Skip header
 
-		$id = Database::insert(
-				Config::SQL_TABLE_ACCOUNTS,
-				['login' => $login, 'email' => $email, 'password_hash' => $password_hash, 'password_salt' => $password_salt]);
+		$id = Database::insert
+		(
+			Config::SQL_TABLE_ACCOUNTS,
+			[
+				'login'         => $login,
+				'email'         => $email,
+				'password_hash' => $password_hash,
+				'password_salt' => $password_salt,
+				'card_id'       => $card->get_id(),
+			]
+		);
 
-		// Fo sure...
-		unset($password_hash);
-		unset($password_salt);
-
-		// Duplicate account
-		if (!$id)
-			return false;
-
-
-		return self::load($id);
+		// Account created, now load it
+		return $id ? self::load($id) : false;
 	}
 
 	/**
 	 * Delete account
 	 *
-	 * @param int $account_id Target account ID
+	 * @param Account $account Target account
 	 *
 	 * @return bool Whenever account exists and has been removed
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 */
-	final public static function delete($account_id)
+	final public static function delete(&$account)
 	{
-		if (!is_valid_id($account_id))
+		if (!$account instanceof Account)
 			throw new InvalidArgumentException;
 
 
-		$result = Database::delete(
-				Config::SQL_TABLE_ACCOUNTS,
-				['account_id' => $account_id]);
+		$result = Database::delete
+		(
+			Config::SQL_TABLE_ACCOUNTS,
+			['account_id' => $account->_id]
+		);
+
+		// Unable to remove
+		return ($result != false);
+	}
+
+
+	/**
+	 * Update account data
+	 *
+	 * @param string $login    Optional. New login
+	 * @param string $email    Optional. New email
+	 * @param string $password Optional. New password
+	 * @param Card   $card     Optional. New Card object
+	 *
+	 * @return bool True on successfully updated account, false if no changes were performed
+	 *
+	 * @throws InvalidArgumentException On invalid input
+	 */
+	final public function update($login = '', $email = '', $password = '', $card = null)
+	{
+		if ((!empty($login) && !is_valid_login($login)) || (!empty($email) && !is_valid_email($email)))
+			throw new InvalidArgumentException;
+
+		if (!empty($password) && !is_valid_password($password))
+			throw new InvalidArgumentException;
+
+		if (($card !== null) && (!$card instanceof Card))
+			throw new InvalidArgumentException;
+
+
+		// Login or email change
+		if (!empty($login)) $fields['login'] = $login;
+		if (!empty($email)) $fields['email'] = $email;
+
+		// Password update
+		if (!empty($password))
+		{
+			// Encrypt it
+			$password_salt = Cipher::generate_salt(10);
+
+			$fields['password_hash'] = Cipher::encrypt($password, $password_salt);
+			$fields['password_salt'] = substr($password_salt, 7); // Skip header
+		}
+
+		// Card specified
+		if ($card !== null)
+			$fields['card_id'] = $card->get_id();
+
+
+		// Nothing to update
+		if (!isset($fields))
+			return false;
+
+
+		$result = Database::update
+		(
+			Config::SQL_TABLE_ACCOUNTS,
+			$fields,
+			['account_id' => $this->_id]
+		);
 
 		return ($result != false);
 	}
@@ -195,37 +266,29 @@ class Account
 
 	/**
 	 * Get account ID
+	 *
 	 * @return int Account ID
 	 */
-	final public function get_id()
-	{
-		return $this->_id;
-	}
+	final public function get_id() { return $this->_id; }
 
 	/**
 	 * Get account login
+	 *
 	 * @return string Account login
 	 */
-	final public function get_login()
-	{
-		return $this->_id;
-	}
+	final public function get_login() { return $this->_login; }
 
 	/**
 	 * Get account email address
+	 *
 	 * @return string Account email address
 	 */
-	final public function get_email()
-	{
-		return $this->_id;
-	}
-}
+	final public function get_email() { return $this->_email; }
 
-
-class AccountDamagedException extends RuntimeException
-{
-}
-
-class AccountSessionFailedException extends RuntimeException
-{
+	/**
+	 * Get account card ID
+	 *
+	 * @return int Account card ID
+	 */
+	final public function get_card_id() { return $this->_card_id; }
 }

@@ -9,7 +9,7 @@ CREATE TABLE `cards`
   `card_id`      INT         NOT NULL AUTO_INCREMENT,
 
   `first_name`   VARCHAR(25) NOT NULL,
-  `middle_name`  VARCHAR(25) NOT NULL,
+  `middle_name` VARCHAR(25) DEFAULT NULL,
   `surname`      VARCHAR(25) NOT NULL,
   `birth_date`   DATETIME    NOT NULL,
 
@@ -21,6 +21,7 @@ CREATE TABLE `cards`
 
 
   PRIMARY KEY (`card_id`),
+
   UNIQUE (`first_name`, `middle_name`, `surname`, `birth_date`),
   UNIQUE (`phone_number`)
 )
@@ -83,5 +84,47 @@ CREATE TABLE `languages`
   PRIMARY KEY (`language_id`),
 
   UNIQUE (`name`, `level`)
+)
+  ENGINE = INNODB;
+
+CREATE TABLE `teachers` (
+  `teacher_id` INT NOT NULL AUTO_INCREMENT,
+  `account_id` INT NOT NULL,
+
+
+  PRIMARY KEY (`teacher_id`),
+  FOREIGN KEY (`account_id`) REFERENCES accounts (`account_id`),
+
+  UNIQUE (`account_id`)
+)
+  ENGINE = INNODB;
+
+
+/* COURSE AND RELATED */
+CREATE TABLE `courses` (
+  `course_id`   INT NOT NULL AUTO_INCREMENT,
+
+  `teacher_id`  INT NOT NULL,
+  `language_id` INT NOT NULL,
+
+
+  PRIMARY KEY (`course_id`),
+  FOREIGN KEY (`teacher_id`) REFERENCES teachers (`teacher_id`),
+  FOREIGN KEY (`language_id`) REFERENCES languages (`language_id`),
+
+  UNIQUE (`teacher_id`, `language_id`)
+)
+  ENGINE = INNODB;
+
+CREATE TABLE `rooms` (
+  `room_id`  INT        NOT NULL AUTO_INCREMENT,
+
+  `number`   VARCHAR(5) NOT NULL,
+  `capacity` INT        NOT NULL,
+
+
+  PRIMARY KEY (`room_id`),
+
+  UNIQUE (`number`)
 )
   ENGINE = INNODB;

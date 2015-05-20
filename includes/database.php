@@ -1,9 +1,9 @@
 <?php
 namespace Kiwi;
 
+use InvalidArgumentException;
 use mysqli;
 use RuntimeException;
-use InvalidArgumentException;
 
 
 register_shutdown_function(__NAMESPACE__ . '\Database::disconnect'); // Close connection on script exit
@@ -12,6 +12,7 @@ register_shutdown_function(__NAMESPACE__ . '\Database::disconnect'); // Close co
 /**
  * Database access and management class.
  * Supports insert,update,delete and select queries with specified data and conditions
+ *
  * @package Kiwi
  */
 abstract class Database
@@ -74,7 +75,7 @@ abstract class Database
 	 * @param string $table Target table, small/big letters, digits and underline character allowed
 	 * @param array  $data  Data array consisting of field and value ie: ['field1' => 'value', 'field2' => 13]
 	 *
-	 * @return int|bool ID of inserted record when successfully executed, false on duplicates
+	 * @return bool|int ID of inserted record when successfully executed, false on duplicates
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 * @throws DatabaseNotConnected On no established database connection
@@ -117,7 +118,7 @@ abstract class Database
 			if ($statement->errno == 1062)
 				return false;
 
-			throw new DatabaseQueryExecutionFailedException('Server response was ' . self::$_handle->connect_errno);
+			throw new DatabaseQueryExecutionFailedException('Server response was ' . self::$_handle->errno);
 		}
 
 		// Something went wrong
@@ -134,15 +135,16 @@ abstract class Database
 	 * @param string $table    Target table, small/big letters, digits and underline character allowed
 	 * @param array  $data     Data array consisting of field and value ie: ['field1' => 'value', 'field2' => 13]
 	 * @param array  $criteria Update conditions in format similar to $data
+	 * @param bool $unique Optional. We require this query to update one (unique) field
 	 *
-	 * @return int|bool Number of records updated, false when nothing were changed
+	 * @return bool|int Number of records updated, true for unique row, false when nothing were changed
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 * @throws DatabaseNotConnected On no established database connection
 	 * @throws DatabaseQueryBuildFailedException On wrongly formatted query
 	 * @throws DatabaseQueryExecutionFailedException On MYSQL error
 	 */
-	final public static function update($table, $data, $criteria)
+	final public static function update($table, $data, $criteria, $unique = false)
 	{
 		if (!is_string($table) || !is_array($data) || !is_array($criteria))
 			throw new InvalidArgumentException;
@@ -178,8 +180,12 @@ abstract class Database
 		if (!$statement->execute())
 			throw new DatabaseQueryExecutionFailedException('Server response was ' . self::$_handle->connect_errno);
 
+		// Unique row, not today
+		if ($unique && ($statement->affected_rows > 1))
+			throw new DatabaseQueryResultInvalidException('Expected row to be unique but ' . $statement->affected_rows . ' rows updated');
 
-		return ($statement->affected_rows !== 0) ? $statement->affected_rows : false;
+
+		return ($statement->affected_rows != 0) ? $statement->affected_rows : false;
 	}
 
 	/**
@@ -188,7 +194,7 @@ abstract class Database
 	 * @param string $table    Target table, small/big letters, digits and underline character allowed
 	 * @param array  $criteria Delete conditions consisting of field and value ie: ['field1' => 'value', 'field2' => 13]
 	 *
-	 * @return int Number of deleted records, false when nothing was found
+	 * @return bool|int Number of deleted records, false when nothing was found
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 * @throws DatabaseNotConnected On no established database connection
@@ -236,8 +242,9 @@ abstract class Database
 	 * @param string $table      Target table, small/big letters, digits and underline character allowed
 	 * @param array  $columns    List of fields to retrieve, ie: ['field1', 'field2', 'field3']
 	 * @param array  $conditions Select conditions consisting of field and value ie: ['field1' => 'value', 'field2' => 13]
+	 * @param bool $unique Optional. We expect this query to return one (unique) row
 	 *
-	 * @return array Array of results on success, false when nothing found
+	 * @return array Array of results/Unique result on success, false when nothing found
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 * @throws DatabaseNotConnected On no established database connection
@@ -246,7 +253,7 @@ abstract class Database
 	 * @throws DatabaseQueryResultInvalidException On result differing from expectations
 	 * @throws DatabaseQueryResultUnhandledException On result retrieving complications
 	 */
-	final public static function select($table, $columns, $conditions)
+	final public static function select($table, $columns, $conditions, $unique = false)
 	{
 		if (!is_string($table) || !is_array($columns) || !is_array($conditions))
 			throw new InvalidArgumentException;
@@ -298,10 +305,19 @@ abstract class Database
 
 		// Buffer returned data
 		$statement->store_result();
+
+		if (!$statement->num_rows)
+			return false;
+
+		// Not what we wanted
+		if ($unique && ($statement->num_rows != 1))
+			throw new DatabaseQueryResultInvalidException('Expected row to be unique but ' . $statement->num_rows . ' rows returned');
+
+
 		$result = [];
 
 		// Build field list
-		while ($field = $meta->fetch_field()) // TODO: review
+		while ($field = $meta->fetch_field())
 			$result[$field->name] = &$row[$field->name];
 
 		$result_handler = [$statement, 'bind_result'];
@@ -329,7 +345,7 @@ abstract class Database
 		$statement->free_result();
 		$statement->close();
 
-		return $results;
+		return !$unique ? $results : $results[0];
 	}
 
 	/**

@@ -6,81 +6,98 @@ use RuntimeException;
 
 
 /**
- * Accounts session, handles local sessions but also provides remote access
+ * Accounts session
+ * Handles local sessions but also provides remote access
+ *
  * @package Kiwi
  */
 class Session
 {
 	/** @var int Session ID */
 	private $_id = 0;
+	/** @var int Session Account ID */
+	private $_account_id = 0;
 
 	/** @var string Session key */
 	private $_key = '';
 
-	/** @var int Account ID */
-	private $_account_id = 0;
-
-
 	/** @var int Last refresh timestamp */
 	private $_last_activity = 0;
 
-
 	/** @var string Client IP address, used along with $_key and $_browser_id for verification */
 	private $_browser_ip = '';
-
 	/** @var string Client browser ID, used along with $_key and $_browser_ip for verification */
 	private $_browser_id = '';
 
 
 	/**
-	 * Disable constructor
+	 * Initialize variables
+	 *
+	 * @param int    $id            Session ID
+	 * @param string $key           Session Key
+	 * @param int    $account_id    Session account ID
+	 * @param int    $last_activity Last activity
+	 * @param string $browser_ip    Browser IP address
+	 * @param string $browser_id    Browser unique ID
 	 */
-	final private function __construct()
+	final private function __construct($id, $key, $account_id, $last_activity, $browser_ip, $browser_id)
 	{
 
+		$this->_id         = $id;
+		$this->_account_id = $account_id;
+
+		$this->_key = $key;
+
+		$this->_last_activity = $last_activity;
+
+		$this->_browser_ip = $browser_ip;
+		$this->_browser_id = $browser_id;
 	}
 
 	/**
 	 * Load session details
 	 *
-	 * @param int $session_id Target session ID
+	 * @param int $id Target session ID
 	 *
-	 * @return Session|bool Session object when everything has been loaded, false for invalid session
+	 * @return bool|Session Session object when everything has been loaded, false for invalid session
 	 *
 	 * @throws InvalidArgumentException On invalid input
-	 * @throws SessionCorruptedException When session is damaged on server-side
 	 */
-	final public static function load($session_id)
+	final public static function load($id)
 	{
-		if (!is_valid_id($session_id))
+		if (!is_valid_id($id))
 			throw new InvalidArgumentException;
 
 
-		$data = Database::select(
-				Config::SQL_TABLE_SESSIONS,
-				['session_key', 'account_id', 'last_activity', 'browser_ip', 'browser_id'],
-				['session_id' => $session_id]);
-
-		// Not what we have expected...
-		if (count($data) > 1)
-			throw new SessionCorruptedException('Query returned ' . count($data) . ' rows');
+		$data = Database::select
+		(
+			Config::SQL_TABLE_SESSIONS,
+			[
+				'session_key',
+				'account_id',
+				'last_activity',
+				'browser_ip',
+				'browser_id',
+			],
+			['session_id' => $id],
+			true
+		);
 
 		// Session not found
-		if (empty($data))
+		if (!$data)
 			return false;
 
 
-		$data = $data[0]; // Simplify a bit
-
-		// Session loaded, now store it
-		$session      = new Session();
-		$session->_id = $session_id;
-
-		$session->_key           = $data['session_key'];
-		$session->_account_id    = $data['account_id'];
-		$session->_last_activity = $data['last_activity'];
-		$session->_browser_ip    = $data['browser_ip'];
-		$session->_browser_id    = $data['browser_id'];
+		// Store data
+		$session = new Session
+		(
+			$id,
+			$data['session_key'],
+			$data['account_id'],
+			$data['last_activity'],
+			$data['browser_ip'],
+			$data['browser_id']
+		);
 
 		return $session;
 	}
@@ -88,9 +105,7 @@ class Session
 	/**
 	 * Find and resume local session
 	 *
-	 * @return Session|bool Session object when cookie has been found and session was loaded, false for missing/invalid key
-	 *
-	 * @throws SessionCorruptedException When session is damaged on server-side
+	 * @return bool|Session Session object when cookie has been found and session was loaded, false for missing/invalid key
 	 */
 	final public static function authorize()
 	{
@@ -112,17 +127,21 @@ class Session
 		}
 
 
-		$data = Database::select(
-				Config::SQL_TABLE_SESSIONS,
-				['session_id'],
-				['session_key' => $key, 'browser_ip' => $_SERVER['REMOTE_ADDR'], 'browser_id' => get_browser_id()]);
+		$data = Database::select
+		(
+			Config::SQL_TABLE_SESSIONS,
+			['session_id'],
+			[
+				'session_key' => $key,
+				'browser_ip'  => $_SERVER['REMOTE_ADDR'],
+				'browser_id'  => get_browser_id(),
+			],
+			true
+		);
 
-		// Table corrupted
-		if (count($data) > 1)
-			throw new SessionCorruptedException('Query returned ' . count($data) . ' rows');
 
 		// Session not found
-		if (empty($data))
+		if (!$data)
 		{
 			// Delete cookie
 			unset($_COOKIE[Config::SESSION_COOKIE]);
@@ -132,187 +151,157 @@ class Session
 		}
 
 
-		$data = $data[0]; // Simplify a bit
-		$id   = $data['session_id'];
-
 		// Refresh session
-		$result = Database::update(
-				Config::SQL_TABLE_SESSIONS,
-				['last_activity' => ['CURRENT_TIMESTAMP']],
-				['session_id' => $id]);
+		$result = Database::update
+		(
+			Config::SQL_TABLE_SESSIONS,
+			['last_activity' => ['CURRENT_TIMESTAMP']],
+			['session_id' => $data['session_id']],
+			true
+		);
 
-		// Cannot update session, whoops ?
-		if (!$result)
-			return false;
-
-
-		return self::load($id);
+		// Unable to update session?
+		return $result ? self::load($data['session_id']) : false;
 	}
 
 	/**
 	 * Close session, force account logout.
 	 * This is a brute method of doing this
 	 *
-	 * @param int $session_id Session ID to kill
+	 * @param int $session Session to kill
 	 *
 	 * @return bool Whenever session exists and was successfully closed
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 */
-	final public static function close($session_id)
+	final public static function close($session)
 	{
-		if (!is_valid_id($session_id))
+		if (!$session instanceof Session)
 			throw new InvalidArgumentException;
 
 
-		$result = Database::delete(
-				Config::SQL_TABLE_SESSIONS,
-				['session_id' => $session_id]);
+		// Cookie present - local session
+		if (isset($_COOKIE[Config::SESSION_COOKIE]))
+		{
+			$key = $_COOKIE[Config::SESSION_COOKIE];
 
+			// Cookie damaged or keys match (local session)
+			if (!Cipher::is_valid_hash($key) || Cipher::verify($session->_key, $key))
+			{
+				// Delete cookie as it is not needed anymore
+				unset($_COOKIE[Config::SESSION_COOKIE]);
+				setcookie(Config::SESSION_COOKIE, null, -1, '/');
+			}
+		}
+
+		$result = Database::delete
+		(
+			Config::SQL_TABLE_SESSIONS,
+			['session_id' => $session->_id]
+		);
+
+		// Found and removed
 		return ($result != false);
 	}
 
 	/**
 	 * Start new session for local
 	 *
-	 * @param int $account_id Target account ID
+	 * @param Account $account Account object
 	 *
-	 * @return Session|bool Session object when session has been opened and client has been authorized, false when session is already opened for this account
+	 * @return bool|Session Session object when session has been opened and client has been authorized, false when session is already opened for this account
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 */
-	final public static function open($account_id)
+	final public static function open($account)
 	{
-		if (!is_valid_id($account_id))
+		if (!$account instanceof Account)
 			throw new InvalidArgumentException;
 
 
+		// TODO: check first
+
 		// Generate key, simple :)
-		$key = Cipher::encrypt(strval($account_id), Cipher::generate_salt(7));
+		$key = Cipher::encrypt(strval($account->get_login()), Cipher::generate_salt(7));
 
-		$id = Database::insert(
-				Config::SQL_TABLE_SESSIONS,
-				['account_id' => $account_id, 'session_key' => $key,
-				 'browser_ip' => $_SERVER['REMOTE_ADDR'], 'browser_id' => get_browser_id()]);
+		$id = Database::insert
+		(
+			Config::SQL_TABLE_SESSIONS,
+			[
+				'account_id'  => $account->get_id(),
+				'session_key' => $key,
+				'browser_ip'  => $_SERVER['REMOTE_ADDR'],
+				'browser_id'  => get_browser_id(),
+			]
+		);
 
-		// Duplicate data, session already exists for this account
-		if (!$id)
-			return false;
-
-
-		// Session opened, throw a cookie :>
-		// setcookie(Config::SESSION_COOKIE, $session_key, time() + Config::SESSION_TIMEOUT, '/', null, false, true);
-		setcookie(Config::SESSION_COOKIE, $key, time() + Config::SESSION_TIMEOUT, '/');
-
-		return self::load($id);
+		// No duplicates? Throw a cookie and load session
+		return ($id && setcookie(Config::SESSION_COOKIE, $key, time() + Config::SESSION_TIMEOUT, '/')) ? self::load($id) : false;
 	}
 
 	/**
 	 * Find and load session of given account.
 	 * This is used to track running sessions
 	 *
-	 * @param int $account_id Target account ID
+	 * @param Account $account Account object
 	 *
-	 * @return Session|bool Session object when session exists and has been loaded, false when account is offline
+	 * @return bool|Session Session object when session exists and has been loaded, false when account is offline
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 */
-	final public static function find($account_id)
+	final public static function find($account)
 	{
-		if (!is_valid_id($account_id))
+		if (!$account instanceof Account)
 			throw new InvalidArgumentException;
 
 
-		$data = Database::select(
-				Config::SQL_TABLE_SESSIONS,
-				['session_id'],
-				['account_id' => $account_id]);
+		$data = Database::select
+		(
+			Config::SQL_TABLE_SESSIONS,
+			['session_id'],
+			['account_id' => $account->get_id()],
+			true
+		);
 
-		// Table corrupted
-		if (count($data) > 1)
-			throw new SessionCorruptedException('Query returned ' . count($data) . ' rows');
-
-		// Account is offline
-		if (empty($data))
-			return false;
-
-
-		$data = $data[0]; // Simplify
-
-		// Load session data
-		return self::load($data['session_id']);
+		// Load session data, if found
+		return $data ? self::load($data['session_id']) : false;
 	}
 
-
-	/**
-	 * Kill local session
-	 * @return bool Whenever the session was closed
-	 */
-	final public function kill()
-	{
-		// Cookie present
-		if (isset($_COOKIE[Config::SESSION_COOKIE]))
-		{
-			$key = $_COOKIE[Config::SESSION_COOKIE];
-
-			// Cookie damaged or keys match (local session)
-			if (!Cipher::is_valid_hash($key) || Cipher::verify($this->_key, $key))
-			{
-				// Delete cookie as it is not needed anymore
-				unset($_COOKIE[Config::SESSION_COOKIE]);
-				setcookie(Config::SESSION_COOKIE, null, -1, '/');
-			}
-
-			unset($key);
-		}
-
-		return self::close($this->_id);
-	}
 
 	/**
 	 * Get session ID
+	 *
 	 * @return int Session ID
 	 */
-	final public function get_id()
-	{
-		return $this->_id;
-	}
+	final public function get_id() { return $this->_id; }
 
 	/**
-	 * Get session account ID
-	 * @return int Session account ID
+	 * Get session Account ID
+	 *
+	 * @return int Account ID
 	 */
-	final public function get_account_id()
-	{
-		return $this->_account_id;
-	}
+	final public function get_account_id() { return $this->_account_id; }
 
 	/**
 	 * Get session last activity timestamp
+	 *
 	 * @return int Last client refresh timestamp
 	 */
-	final public function get_last_activity()
-	{
-		return $this->_last_activity;
-	}
+	final public function get_last_activity() { return $this->_last_activity; }
 
 	/**
 	 * Get session clients browser IP address
+	 *
 	 * @return string Client browser IP address
 	 */
-	final public function get_browser_ip()
-	{
-		return $this->_browser_ip;
-	}
+	final public function get_browser_ip() { return $this->_browser_ip; }
 
 	/**
 	 * Get session clients browser ID
+	 *
 	 * @return string Client browser ID
 	 */
-	final public function get_browser_id()
-	{
-		return $this->_browser_id;
-	}
+	final public function get_browser_id() { return $this->_browser_id; }
 }
 
 

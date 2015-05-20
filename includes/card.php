@@ -2,72 +2,87 @@
 namespace Kiwi;
 
 use InvalidArgumentException;
-use RuntimeException;
 
 
+/**
+ * Information card for Accounts
+ * Holds all personal data
+ *
+ * @package Kiwi
+ */
 class Card
 {
-	const FIELDS = ['first_name' => 'string', 'middle_name' => 'string', 'surname' => 'string',
-					'birth_date' => 'integer', 'phone_number' => 'string', 'address' => 'string',
-					'city'       => 'string', 'postal_code' => 'string', 'street' => 'string'];
+	/** Card fields and their types */
+	const FIELDS = ['first_name'   => 'string',
+	                'middle_name'  => 'string',
+	                'surname'      => 'string',
+	                'birth_date'   => 'integer',
+	                'phone_number' => 'string',
+	                'address'      => 'string',
+	                'city'         => 'string',
+	                'postal_code'  => 'string',
+	                'street'       => 'string'];
+
 
 	/** @var int Card ID */
 	private $_id = 0;
-
 	/** @var array Card fields together with modified status */
 	private $_fields = [];
 
 
 	/**
-	 * Disable constructor
+	 * Initialize variables
+	 *
+	 * @param int   $id     Card ID
+	 * @param array $fields Card fields
 	 */
-	final private function __construct()
+	final private function __construct($id, $fields)
 	{
-
+		$this->_id     = $id;
+		$this->_fields = $fields;
 	}
 
 
 	/**
 	 * Load card data
 	 *
-	 * @param int $card_id Target card ID
+	 * @param int $id Target card ID
 	 *
-	 * @return Card|bool Card object when all data was loaded, false for invalid card
+	 * @return bool|Card Card object when all data was loaded, false for invalid card
 	 *
 	 * @throws InvalidArgumentException On invalid input
-	 * @throws CardDamagedException When card is damaged on server-side
 	 */
-	final public static function load($card_id)
+	final public static function load($id)
 	{
-		if (!is_valid_id($card_id))
+		if (!is_valid_id($id))
 			throw new InvalidArgumentException;
 
 
-		$data = Database::select(
-				Config::SQL_TABLE_CARDS,
-				array_keys(self::FIELDS),
-				['card_id' => $card_id]);
-
-		// Table corrupted
-		if (count($data) > 1)
-			throw new CardDamagedException('Query returned ' . count($data) . ' rows');
+		$data = Database::select
+		(
+			Config::SQL_TABLE_CARDS,
+			array_keys(self::FIELDS),
+			['card_id' => $id],
+			true
+		);
 
 		// Card not found
-		if (empty($data))
+		if (!$data)
 			return false;
 
 
-		$data = $data[0];
+		$fields = [];
 
-		// Store what was loaded
-		$card      = new Card();
-		$card->_id = $card_id;
-
+		// Prepare data
 		foreach ($data as $name => $value)
-		{
-			$card->_fields[$name]['value']    = $value;
-			$card->_fields[$name]['modified'] = false;
-		}
+			$fields[$name]['value'] = $value;
+
+		// Store it
+		$card = new Card
+		(
+			$id,
+			$fields
+		);
 
 		return $card;
 	}
@@ -77,16 +92,18 @@ class Card
 	 *
 	 * @param array $fields Array of fields consisting of name and value, ie: ['first_name' => 'Bob', 'surname' => 'Marley']
 	 *
-	 * @return Card|bool Card object when operation finished without any conflicts, false for duplicates
+	 * @return bool|Card Card object when operation finished without any conflicts, false for duplicates
 	 *
 	 * @throws InvalidArgumentException On invalid input
 	 */
 	final public static function create($fields)
 	{
 		// No duplicate keys
-		if (count(self::FIELDS) !== count(array_unique(array_keys($fields))))
+		if (count(self::FIELDS) != count(array_unique(array_keys($fields))))
 			throw new InvalidArgumentException;
 
+
+		// TODO: check first
 
 		// Make sure fields are correct, no trash
 		foreach ($fields as $name => $value)
@@ -94,16 +111,14 @@ class Card
 				throw new InvalidArgumentException;
 
 
-		$id = Database::insert(
-				Config::SQL_TABLE_CARDS,
-				$fields);
+		$id = Database::insert
+		(
+			Config::SQL_TABLE_CARDS,
+			$fields
+		);
 
-		// Already exists!
-		if (!$id)
-			return false;
-
-
-		return self::load($id);
+		// Card created, load it
+		return $id ? self::load($id) : false;
 	}
 
 	/**
@@ -131,47 +146,43 @@ class Card
 	/**
 	 * Synchronize card data
 	 *
-	 * @return int|bool Number on fields updated on success, false if no changes were performed
+	 * @param array $fields New fields values
 	 *
-	 * @throws CardDamagedException Wne card is damaged on server-side
+	 * @return bool|int True on successfully updated card, false if no changes were performed
+	 *
+	 * @throws InvalidArgumentException On invalid input
 	 */
-	final public function update()
+	final public function update($fields)
 	{
-		$fields = [];
+		// No duplicate keys
+		if (count($fields) != count(array_unique(array_keys($fields))))
+			throw new InvalidArgumentException;
 
-		// Build list of modified fields, don't waste time on unchanged ones
-		foreach ($this->_fields as $name => $data)
-		{
-			if ($data['modified'] == true)
-				$fields[$name] = $data['value'];
-		}
-
-		// Nothing to update...
-		if (!count($fields))
-			return false;
+		// Make sure fields are correct
+		foreach ($fields as $name => $value)
+			if (!self::_is_valid_field([$name => $value]))
+				throw new InvalidArgumentException;
 
 
-		$result = Database::update(
-				Config::SQL_TABLE_CARDS,
-				$fields,
-				['card_id' => $this->_id]);
+		$result = Database::update
+		(
+			Config::SQL_TABLE_CARDS,
+			$fields,
+			['card_id' => $this->_id],
+			true
+		);
 
-		// Table corrupted
-		if ($result > 1)
-			throw new CardDamagedException('Query updated ' . $result . ' rows');
-
-		// Nothing changed...
-		if (!$result)
-			return false;
-
-
-		// Everything is up-to-date
-		foreach ($this->_fields as $name => &$data)
-			$data['modified'] = false;
-
-
-		return count($fields);
+		// Was something changed?
+		return ($result != false);
 	}
+
+
+	/**
+	 * Get card ID
+	 *
+	 * @return int Card ID
+	 */
+	final public function get_id() { return $this->_id; }
 
 	/**
 	 * Get field value by name
@@ -184,7 +195,6 @@ class Card
 	{
 		if (!isset($this->_fields[$name]))
 			return false;
-
 
 		return $this->_fields[$name]['value'];
 	}
@@ -204,31 +214,4 @@ class Card
 
 		return $fields;
 	}
-
-	/**
-	 * Change field value
-	 *
-	 * @param string $name  Target field name
-	 * @param mixed  $value New value, empty data not allowed
-	 *
-	 * @return bool Whenever variable has been modified
-	 *
-	 * @throws InvalidArgumentException On invalid input
-	 */
-	final public function set_field($name, $value)
-	{
-		if (!self::_is_valid_field([$name => $value]))
-			throw new InvalidArgumentException;
-
-
-		$this->_fields[$name]['value']    = $value;
-		$this->_fields[$name]['modified'] = true;
-
-		return true;
-	}
-}
-
-
-class CardDamagedException extends RuntimeException
-{
 }

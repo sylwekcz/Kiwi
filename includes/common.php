@@ -23,6 +23,24 @@ function array_references($array, $plain = false)
 	return $references;
 }
 
+
+/**
+ * Copy object to array and return its reference
+ *
+ * @param array $array Target array
+ * @param mixed $value Value to insert
+ *
+ * @return mixed Reference to newly inserted object
+ */
+function array_insert(&$array, $value)
+{
+	array_push($array, $value);
+	end($array);
+	$a = &$array[key($array)];
+
+	return $a;
+}
+
 /**
  * Get browser IP and User Agent
  * @return array
@@ -72,6 +90,7 @@ function is_valid_login($login)
 
 /**
  * Make sure password is in correct format
+ *
  * @param string $password String to verify
  *
  * @return bool Whenever password is in valid format
@@ -83,6 +102,7 @@ function is_valid_password($password)
 
 /**
  * Make sure ID is correct
+ *
  * @param int $id Number to verify
  *
  * @return bool Whenever ID is valid
